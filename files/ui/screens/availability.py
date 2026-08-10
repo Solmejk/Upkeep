@@ -5,19 +5,24 @@ or not owned, with colored tiles, a status legend that doubles as a
 filter, a price sort, and an Export button (ui.components.export_modal).
 """
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QSize, Signal
 from PySide6.QtGui import QColor, QAction, QActionGroup
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QScrollArea, QToolButton, QMenu,
+    QScrollArea, QToolButton, QMenu, QMessageBox,
 )
 
 import availability
 import moxfield
 from app import MTGApp
+from models import saved_availability_decks
 from models.deck import Deck
+from paths import ASSETS_DIR
 from ui.background import run_in_background
 from ui.components.card_section import rebuild_card_sections, quantity_caption
+from ui.icon_utils import tinted_icon, tinted_pixmap
+
+ICON_SIZE = QSize(16, 16)
 
 
 STATUS_COLORS = {
@@ -40,6 +45,40 @@ SORT_LABELS = {
     SORT_NAME: "Name",
 }
 INACTIVE_COLOR = QColor("#444444")
+
+
+class _ClickableLabel(QLabel):
+    """A plain QLabel that emits `clicked` on left-click — used for the
+    back arrow so it sits flush with surrounding text instead of getting
+    a button's padding/chrome."""
+
+    clicked = Signal()
+
+    def __init__(self, text: str, parent=None):
+        super().__init__(text, parent)
+        self.setCursor(Qt.PointingHandCursor)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
+
+class _ClickableIconLabel(QLabel):
+    """A plain QLabel showing a tinted icon that emits `clicked` on
+    left-click — the icon counterpart of _ClickableLabel, used for the
+    Save/bookmark control so it matches the Back arrow's bare-icon look."""
+
+    clicked = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setCursor(Qt.PointingHandCursor)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
 
 class _LegendChip(QWidget):
@@ -93,6 +132,121 @@ class _LegendChip(QWidget):
         self._label.setStyleSheet(f"color: {text_color};")
 
 
+def _count_box(count: int, color: QColor) -> QLabel:
+    """A small colored badge showing a status count (free/used/unowned),
+    for the saved-deck row summary."""
+    box = QLabel(str(count))
+    box.setAlignment(Qt.AlignCenter)
+    box.setFixedWidth(36)
+    box.setStyleSheet(
+        f"background-color: {color.name()}; color: #1a1a1a; border-radius: 4px;"
+        f"font-weight: 600; padding: 3px 0;"
+    )
+    return box
+
+
+class _SavedDeckRow(QWidget):
+    """A saved deck, rendered as a full-width row (matching the URL bar)
+    with its name, free/used/unowned count badges, and missing-cost
+    price. Click the row (outside the buttons) to load & re-check that
+    deck; Reload re-runs the price/availability check against the
+    current collection without re-fetching the deck itself; Delete asks
+    for confirmation before forgetting it."""
+
+    load_requested = Signal(str)  # deck_id
+    reload_requested = Signal(str)  # deck_id
+    remove_requested = Signal(str)  # deck_id
+
+    def __init__(self, entry: dict, parent=None):
+        """entry: one saved-decks record — {deck_id, name, url, summary}
+        where summary is {"free", "used", "unowned", "missing_cost"}."""
+        super().__init__(parent)
+        self._deck_id = entry["deck_id"]
+        self._name = entry["name"]
+        self.setObjectName("savedDeckRow")
+        self.setStyleSheet(
+            "#savedDeckRow { background-color: #2c2c2c; border-radius: 8px; }"
+            "#savedDeckRow:hover { background-color: #363636; }"
+        )
+        self.setCursor(Qt.PointingHandCursor)
+
+        summary = entry.get("summary") or {}
+
+        # Zero left/right margins: the outer saved_layout already applies
+        # the screen's standard 40px margin, so the name text and the
+        # Delete button line up exactly with the header/URL bar/Check
+        # button above rather than sitting inset from them.
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 8, 0, 8)
+        layout.setSpacing(10)
+
+        name_label = QLabel(entry["name"])
+        name_label.setStyleSheet("color: #e8e8e8; font-weight: 500;")
+        layout.addWidget(name_label, 1)
+
+        price_label = QLabel(f"Missing cards ≈ €{summary.get('missing_cost', 0):,.2f}")
+        price_label.setStyleSheet("color: #bbbbbb;")
+        layout.addWidget(price_label)
+
+        layout.addWidget(_count_box(summary.get("free", 0), STATUS_COLORS[availability.FREE]))
+        layout.addWidget(_count_box(summary.get("used", 0), STATUS_COLORS[availability.USED]))
+        layout.addWidget(_count_box(summary.get("unowned", 0), STATUS_COLORS[availability.UNOWNED]))
+
+        self._reload_btn = QPushButton()
+        self._reload_btn.setIcon(tinted_icon(ASSETS_DIR / "reload.png", "#cccccc", size=16))
+        self._reload_btn.setIconSize(ICON_SIZE)
+        self._reload_btn.setToolTip("Refresh price/availability against your current collection")
+        self._reload_btn.setCursor(Qt.PointingHandCursor)
+        self._reload_btn.setFixedSize(32, 32)
+        self._reload_btn.setStyleSheet(
+            "QPushButton { background-color: #4a4a4a; }"
+            "QPushButton:hover { background-color: #5a5a5a; }"
+            "QPushButton:disabled { background-color: #3a3a3a; }"
+        )
+        self._reload_btn.clicked.connect(self._on_reload_clicked)
+        layout.addWidget(self._reload_btn)
+
+        delete_btn = QPushButton()
+        delete_btn.setIcon(tinted_icon(ASSETS_DIR / "trash-bin.png", "#e8a0a0", size=16))
+        delete_btn.setIconSize(ICON_SIZE)
+        delete_btn.setToolTip("Remove this saved deck")
+        delete_btn.setCursor(Qt.PointingHandCursor)
+        delete_btn.setFixedSize(32, 32)
+        delete_btn.setStyleSheet(
+            "QPushButton { background-color: #4a2323; }"
+            "QPushButton:hover { background-color: #6b2f2f; }"
+        )
+        delete_btn.clicked.connect(self._on_delete_clicked)
+        layout.addWidget(delete_btn)
+
+    def _on_reload_clicked(self):
+        """Slot for the reload button: asks the screen to re-run the
+        availability check against the current collection, keeping the
+        already-fetched deck contents (no Moxfield re-fetch)."""
+        self._reload_btn.setEnabled(False)
+        self.reload_requested.emit(self._deck_id)
+
+    def _on_delete_clicked(self):
+        """Slot for the Delete button: confirms before forgetting this
+        saved deck."""
+        answer = QMessageBox.question(
+            self,
+            "Remove saved deck",
+            f"Remove \"{self._name}\" from your saved decks?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer == QMessageBox.Yes:
+            self.remove_requested.emit(self._deck_id)
+
+    def mousePressEvent(self, event):
+        """Clicking anywhere on the row outside its buttons loads that
+        deck (buttons consume their own clicks and never reach here)."""
+        if event.button() == Qt.LeftButton:
+            self.load_requested.emit(self._deck_id)
+        super().mousePressEvent(event)
+
+
 class AvailabilityScreen(QWidget):
     """Paste a Moxfield deck URL and see which of its cards are free to
     use, already tied up in another active deck, or not owned at all."""
@@ -114,6 +268,8 @@ class AvailabilityScreen(QWidget):
         self._last_deck_name = None
         self._last_commander_names = set()
         self._last_results = None
+        self._last_deck_id = None
+        self._last_url = ""
         self._active_statuses = {availability.FREE, availability.USED, availability.UNOWNED}
         self._sort_mode = SORT_NAME
 
@@ -121,10 +277,27 @@ class AvailabilityScreen(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
+        title_area = QWidget()
+        title_layout = QVBoxLayout(title_area)
+        title_layout.setContentsMargins(40, 30, 40, 10)
+        title_layout.setSpacing(2)
+
+        # Only appears while a deck's results are showing, above the
+        # title — clears back to the blank check screen (and the
+        # saved-decks list). A bare icon flush with the title's left
+        # edge, not a bordered button.
+        self._back_btn = _ClickableLabel("←")
+        self._back_btn.setStyleSheet("color: #e8a838; font-size: 20px; font-weight: 700;")
+        self._back_btn.setContentsMargins(0, 0, 0, 0)
+        self._back_btn.clicked.connect(self._on_new_check_clicked)
+        self._back_btn.hide()
+        title_layout.addWidget(self._back_btn, 0, Qt.AlignLeft)
+
         header = QLabel("Availability Checker")
         header.setObjectName("screenTitle")
-        header.setContentsMargins(40, 30, 40, 10)
-        outer.addWidget(header)
+        title_layout.addWidget(header)
+
+        outer.addWidget(title_area)
 
         # Row 1: URL input, Check, Sort
         input_row = QWidget()
@@ -142,17 +315,37 @@ class AvailabilityScreen(QWidget):
         self._check_btn.clicked.connect(self._on_check_clicked)
         input_layout.addWidget(self._check_btn)
 
-        self._sort_btn = self._build_sort_button()
-        self._sort_btn.setFixedHeight(self._check_btn.sizeHint().height())
-        input_layout.addWidget(self._sort_btn)
-
         # Only appears once there are results to export — see _on_check_finished
         self._export_btn = QPushButton("Export")
         self._export_btn.clicked.connect(self._on_export_clicked)
+        self._export_btn.setStyleSheet(
+            "QPushButton { padding: 2px 10px; font-weight: 500; font-size: 12px; }"
+        )
+        self._export_btn.setFixedHeight(24)
         self._export_btn.hide()
         input_layout.addWidget(self._export_btn)
 
+        # Only appears while viewing a deck's results — a bare bookmark
+        # icon, matching the Back arrow's look. Swaps to the filled
+        # "checked" icon once the current deck is saved.
+        self._save_btn = _ClickableIconLabel()
+        self._save_btn.setPixmap(tinted_pixmap(ASSETS_DIR / "bookmark-unchecked.png", "#e8a838", size=20))
+        self._save_btn.clicked.connect(self._on_save_clicked)
+        self._save_btn.hide()
+        input_layout.addWidget(self._save_btn)
+
         outer.addWidget(input_row)
+
+        # Saved-deck rows, full-width to match the URL bar — only shown on
+        # the blank check screen (i.e. no deck currently being displayed).
+        # Each row summarizes that deck's last check: free/used/unowned
+        # counts and missing-cards cost.
+        self._saved_row = QWidget()
+        self._saved_layout = QVBoxLayout(self._saved_row)
+        self._saved_layout.setContentsMargins(40, 0, 40, 16)
+        self._saved_layout.setSpacing(8)
+        outer.addWidget(self._saved_row)
+        self._refresh_saved_row()
 
         # Row 2: status/summary text (left) + legend chips, which double as
         # status filters (right)
@@ -172,6 +365,10 @@ class AvailabilityScreen(QWidget):
             chip.toggled.connect(self._on_legend_toggled)
             status_layout.addWidget(chip)
             self._legend_chips[status] = chip
+
+        self._sort_btn = self._build_sort_button()
+        self._sort_btn.hide()
+        status_layout.addWidget(self._sort_btn)
 
         outer.addWidget(status_row)
 
@@ -195,7 +392,9 @@ class AvailabilityScreen(QWidget):
         button-like) menu of price-high-low/price-low-high/name options.
         Returns the assembled button."""
         button = QToolButton()
-        button.setText("Sort")
+        button.setText(" Sort")
+        button.setIcon(tinted_icon(ASSETS_DIR / "sort.png", "#e8e8e8", size=14))
+        button.setIconSize(QSize(14, 14))
         button.setPopupMode(QToolButton.InstantPopup)
 
         menu = QMenu(button)
@@ -247,6 +446,8 @@ class AvailabilityScreen(QWidget):
             self._status_label.setText("Log in first via the sidebar avatar.")
             return
 
+        self._last_url = url
+        self._last_deck_id = deck_id
         self._check_btn.setEnabled(False)
         self._status_label.setText("Checking…")
         run_in_background(
@@ -274,8 +475,31 @@ class AvailabilityScreen(QWidget):
         _fetch_and_check."""
         self._check_btn.setEnabled(True)
         self._last_deck_name, self._last_commander_names, self._last_results = result
-        self._export_btn.show()
+        self._set_viewing_deck(True)
         self._apply_filter()
+        self._refresh_saved_row()
+
+    def _set_viewing_deck(self, is_viewing: bool):
+        """Toggles the row between the two states: blank check screen
+        (URL box + Check button, saved-deck rows below) and viewing a
+        checked deck's results (Back button + Sort/Export/Save, no URL
+        box). The Save bookmark stays visible either way, swapping
+        between its unchecked/checked icon — see _refresh_save_icon."""
+        self._back_btn.setVisible(is_viewing)
+        self._url_input.setVisible(not is_viewing)
+        self._check_btn.setVisible(not is_viewing)
+        self._sort_btn.setVisible(is_viewing)
+        self._export_btn.setVisible(is_viewing)
+        self._save_btn.setVisible(is_viewing)
+        self._refresh_save_icon()
+
+    def _refresh_save_icon(self):
+        """Swaps the Save bookmark between its unchecked (not yet saved)
+        and checked (already saved) icon for the currently-viewed deck."""
+        already_saved = self._last_deck_id is not None and saved_availability_decks.is_saved(self._last_deck_id)
+        icon_name = "bookmark-checked.png" if already_saved else "bookmark-unchecked.png"
+        self._save_btn.setPixmap(tinted_pixmap(ASSETS_DIR / icon_name, "#e8a838", size=20))
+        self._save_btn.setToolTip("Saved — click to remove" if already_saved else "Save this deck")
 
     def _on_check_failed(self, message: str):
         """Background-task callback for a failed check: surfaces the
@@ -290,6 +514,137 @@ class AvailabilityScreen(QWidget):
         display. No-ops if nothing's been checked yet."""
         if self._last_results is not None:
             self.export_requested.emit(self._last_results)
+
+    def _on_save_clicked(self):
+        """Slot for the Save bookmark: toggles the currently-viewed deck's
+        saved state. If it's not saved yet, stores its URL and result
+        summary so it shows up as a row on the blank check screen; if
+        it's already saved, clicking again forgets it. No-ops if nothing's
+        been checked."""
+        if self._last_deck_id is None or self._last_results is None:
+            return
+        if saved_availability_decks.is_saved(self._last_deck_id):
+            saved_availability_decks.remove_deck(self._last_deck_id)
+        else:
+            saved_availability_decks.save_deck(
+                self._last_deck_id,
+                self._last_deck_name or self._last_deck_id,
+                self._last_url,
+                self._summary_stats(self._last_results),
+            )
+        self._refresh_save_icon()
+        self._refresh_saved_row()
+
+    @staticmethod
+    def _summary_stats(results: list[dict]) -> dict:
+        """Rolls up a full (unfiltered) results list into the counts/cost
+        shown on the status line and on a saved-deck row."""
+        return {
+            "free": sum(1 for r in results if r["status"] == availability.FREE),
+            "used": sum(1 for r in results if r["status"] == availability.USED),
+            "unowned": sum(1 for r in results if r["status"] == availability.UNOWNED),
+            "missing_cost": sum(r["missing_cost"] for r in results),
+        }
+
+    def _refresh_saved_row(self):
+        """Rebuilds the saved-deck rows from disk. Only visible on the
+        blank check screen (no deck currently displayed) and when there's
+        at least one saved deck."""
+        while self._saved_layout.count():
+            item = self._saved_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        saved = saved_availability_decks.get_saved()
+        for entry in saved:
+            row = _SavedDeckRow(entry)
+            row.load_requested.connect(self._on_saved_row_load)
+            row.reload_requested.connect(self._on_saved_row_reload)
+            row.remove_requested.connect(self._on_saved_row_remove)
+            self._saved_layout.addWidget(row)
+
+        self._saved_row.setVisible(bool(saved) and self._last_results is None)
+
+    def _on_saved_row_load(self, deck_id: str):
+        """Slot for a saved row's click: puts its URL back in the input
+        box and re-runs the check."""
+        for entry in saved_availability_decks.get_saved():
+            if entry["deck_id"] == deck_id:
+                self._url_input.setText(entry["url"])
+                break
+        self._on_check_clicked()
+
+    def _on_saved_row_remove(self, deck_id: str):
+        """Slot for a saved row's Delete button (after confirmation):
+        forgets that deck and refreshes the row list."""
+        saved_availability_decks.remove_deck(deck_id)
+        self._refresh_saved_row()
+
+    def _on_saved_row_reload(self, deck_id: str):
+        """Slot for a saved row's reload button: re-runs the
+        price/availability check against the current collection, reusing
+        the deck's already-cached card list (no Moxfield re-fetch) —
+        just picks up changes made to the collection since it was saved."""
+        entry = next((e for e in saved_availability_decks.get_saved() if e["deck_id"] == deck_id), None)
+        if entry is None:
+            return
+        run_in_background(
+            lambda: self._recheck_saved_deck(deck_id, entry["name"], entry["url"]),
+            self._bg_tasks,
+            on_finished=self._on_saved_reload_finished,
+            on_failed=self._on_saved_reload_failed,
+        )
+
+    def _recheck_saved_deck(self, deck_id: str, name: str, url: str):
+        """Background-task body: loads the deck from its local cache
+        (force=False) and re-runs check_availability against the current
+        collection. If the deck's cache was cleared since it was saved,
+        load(force=False) silently leaves it empty (no cards, no error) —
+        so fall back to a real fetch in that case rather than reporting
+        zero cards everywhere. Returns (deck_id, name, url, summary) for
+        _on_saved_reload_finished."""
+        deck = Deck(deck_id, "")
+        deck.load()
+        if not deck.cards:
+            deck.load(force=True)
+        results = availability.check_availability(self.app, deck.cards)
+        return deck_id, deck.name or name, url, self._summary_stats(results)
+
+    def _on_saved_reload_finished(self, result):
+        """Background-task callback for a successful reload: persists the
+        refreshed summary and re-renders the saved rows."""
+        deck_id, name, url, summary = result
+        saved_availability_decks.save_deck(deck_id, name, url, summary)
+        self._refresh_saved_row()
+
+    def _on_saved_reload_failed(self, message: str):
+        """Background-task callback for a failed reload: surfaces the
+        error in the status line and re-enables the row's reload button
+        (via a full refresh)."""
+        self._status_label.setText(f"Couldn't refresh that deck: {message}")
+        self._refresh_saved_row()
+
+    def _on_new_check_clicked(self):
+        """Slot for the Back button: clears the currently-displayed deck
+        and returns to the blank check screen (URL box + saved-deck
+        rows)."""
+        self._last_results = None
+        self._last_deck_name = None
+        self._last_commander_names = set()
+        self._last_deck_id = None
+        self._last_url = ""
+        self._url_input.clear()
+        self._status_label.clear()
+        self._set_viewing_deck(False)
+        rebuild_card_sections(
+            self._sections_layout, [], set(),
+            caption_fn=self._caption_with_cost,
+            on_click=self.card_clicked.emit,
+            color_fn=lambda card: STATUS_COLORS[card["status"]],
+            sort_fn=self._sorted_cards,
+        )
+        self._refresh_saved_row()
 
     def _apply_filter(self):
         """Narrows self._last_results to the currently-active legend
@@ -307,14 +662,10 @@ class AvailabilityScreen(QWidget):
         # Counts/cost always reflect the full check, not just what's shown
         # after filtering — "how much would it cost to finish this deck"
         # shouldn't change just because you hid the free cards.
-        all_results = self._last_results or []
-        free = sum(1 for r in all_results if r["status"] == availability.FREE)
-        used = sum(1 for r in all_results if r["status"] == availability.USED)
-        unowned = sum(1 for r in all_results if r["status"] == availability.UNOWNED)
-        missing_cost = sum(r["missing_cost"] for r in all_results)
+        stats = self._summary_stats(self._last_results or [])
         self._status_label.setText(
-            f"{deck_name} — {free} free · {used} used elsewhere · {unowned} not owned"
-            f"  ·  missing cards cost ≈ €{missing_cost:,.2f}"
+            f"{deck_name} — {stats['free']} free · {stats['used']} used elsewhere · "
+            f"{stats['unowned']} not owned  ·  missing cards cost ≈ €{stats['missing_cost']:,.2f}"
         )
 
         rebuild_card_sections(

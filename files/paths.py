@@ -10,11 +10,13 @@ directory irrelevant.
 from pathlib import Path
 
 FILES_ROOT = Path(__file__).parent
+ASSETS_DIR = FILES_ROOT / "assets"
 CACHE_DIR = FILES_ROOT / "cache"
 IMAGES_DIR = CACHE_DIR / "images"
 DECKS_DIR = CACHE_DIR / "decks"
 DECK_STATES_PATH = CACHE_DIR / "deck_states.json"
 SESSION_PATH = CACHE_DIR / "session.json"
+SAVED_AVAILABILITY_DECKS_PATH = CACHE_DIR / "saved_availability_decks.json"
 
 
 def user_cache_path(username: str) -> Path:
