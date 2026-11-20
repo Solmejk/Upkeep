@@ -1,9 +1,27 @@
-*.json
-*.img
-*.jpg
-*.png
+# --- Python -------------------------------------------------------------
 __pycache__/
+*.py[cod]
 venv/
 .venv/
+
+# --- App: downloaded / generated -----------------------------------------
+# Moxfield data, card images, Scryfall prices, the sync log — all rebuilt
+# automatically. The folder itself stays (.gitkeep).
+files/cache/*
+!files/cache/.gitkeep
+
+# --- App: your own data ---------------------------------------------------
+# Deck Maker decks, game tracker, purchases, showcases, custom card images,
+# value / price history, ... — personal, never committed.
+files/data/
+
+# --- Logs -----------------------------------------------------------------
+*.log
+
+# --- Editors / tools ------------------------------------------------------
 .claude/
+.vscode/
+.idea/
+
+# --- Personal notes -------------------------------------------------------
 TODO.txt
