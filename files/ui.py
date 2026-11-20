@@ -39,7 +39,7 @@ def main():
     qt_app.setStyleSheet(load_stylesheet(STYLE_PATH))
 
     window = MainWindow(mtg_app)
-    window.show()
+    window.showMaximized()
 
     def _shutdown():
         # Background image/deck-load tasks (ui/image_loader.py, ui/background.py)

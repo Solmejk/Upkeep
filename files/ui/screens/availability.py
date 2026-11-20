@@ -6,10 +6,10 @@ filter, a price sort, and an Export button (ui.components.export_modal).
 """
 
 from PySide6.QtCore import Qt, QSize, Signal
-from PySide6.QtGui import QColor, QAction, QActionGroup
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QScrollArea, QToolButton, QMenu, QMessageBox,
+    QScrollArea, QToolButton, QMessageBox,
 )
 
 import availability
@@ -20,6 +20,7 @@ from models.deck import Deck
 from paths import ASSETS_DIR
 from ui.background import run_in_background
 from ui.components.card_section import rebuild_card_sections, quantity_caption
+from ui.components.sort_button import build_sort_button
 from ui.icon_utils import tinted_icon, tinted_pixmap
 
 ICON_SIZE = QSize(16, 16)
@@ -47,27 +48,10 @@ SORT_LABELS = {
 INACTIVE_COLOR = QColor("#444444")
 
 
-class _ClickableLabel(QLabel):
-    """A plain QLabel that emits `clicked` on left-click — used for the
-    back arrow so it sits flush with surrounding text instead of getting
-    a button's padding/chrome."""
-
-    clicked = Signal()
-
-    def __init__(self, text: str, parent=None):
-        super().__init__(text, parent)
-        self.setCursor(Qt.PointingHandCursor)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.clicked.emit()
-        super().mousePressEvent(event)
-
-
 class _ClickableIconLabel(QLabel):
     """A plain QLabel showing a tinted icon that emits `clicked` on
-    left-click — the icon counterpart of _ClickableLabel, used for the
-    Save/bookmark control so it matches the Back arrow's bare-icon look."""
+    left-click — the Save/bookmark control, a bare icon rather than a
+    bordered button."""
 
     clicked = Signal()
 
@@ -253,6 +237,7 @@ class AvailabilityScreen(QWidget):
 
     card_clicked = Signal(dict)
     export_requested = Signal(list)
+    back_requested = Signal()  # Back on the blank check screen (to the Other Apps page)
 
     def __init__(self, app: MTGApp):
         """Builds the (initially empty) screen chrome — URL input, Check/
@@ -282,20 +267,26 @@ class AvailabilityScreen(QWidget):
         title_layout.setContentsMargins(40, 30, 40, 10)
         title_layout.setSpacing(2)
 
-        # Only appears while a deck's results are showing, above the
-        # title — clears back to the blank check screen (and the
-        # saved-decks list). A bare icon flush with the title's left
-        # edge, not a bordered button.
-        self._back_btn = _ClickableLabel("←")
-        self._back_btn.setStyleSheet("color: #e8a838; font-size: 20px; font-weight: 700;")
-        self._back_btn.setContentsMargins(0, 0, 0, 0)
-        self._back_btn.clicked.connect(self._on_new_check_clicked)
-        self._back_btn.hide()
-        title_layout.addWidget(self._back_btn, 0, Qt.AlignLeft)
+        # Back (an app on the Other Apps page, like the others): while a
+        # deck's results are showing it clears back to the blank check
+        # screen (and the saved-decks list); from there, to Other Apps.
+        self._viewing = False
+        back_btn = QPushButton("← Back")
+        back_btn.setObjectName("backButton")
+        back_btn.clicked.connect(self._on_back_clicked)
+        title_layout.addWidget(back_btn, 0, Qt.AlignLeft)
+        title_layout.addSpacing(10)
 
+        # Title row: the title, and — while viewing a deck's results — the
+        # Save bookmark and Export at the top right, like other screens'
+        # header buttons
+        header_row = QHBoxLayout()
+        header_row.setSpacing(12)
         header = QLabel("Availability Checker")
         header.setObjectName("screenTitle")
-        title_layout.addWidget(header)
+        header_row.addWidget(header)
+        header_row.addStretch()
+        title_layout.addLayout(header_row)
 
         outer.addWidget(title_area)
 
@@ -315,24 +306,21 @@ class AvailabilityScreen(QWidget):
         self._check_btn.clicked.connect(self._on_check_clicked)
         input_layout.addWidget(self._check_btn)
 
+        # Only appears while viewing a deck's results — a bare bookmark
+        # icon (title row, top right). Swaps to the filled "checked" icon
+        # once the current deck is saved.
+        self._save_btn = _ClickableIconLabel()
+        self._save_btn.setPixmap(tinted_pixmap(ASSETS_DIR / "bookmark-unchecked.png", "#e8a838", size=20))
+        self._save_btn.setToolTip("Save this deck to the list below the URL box")
+        self._save_btn.clicked.connect(self._on_save_clicked)
+        self._save_btn.hide()
+        header_row.addWidget(self._save_btn, 0, Qt.AlignVCenter)
+
         # Only appears once there are results to export — see _on_check_finished
         self._export_btn = QPushButton("Export")
         self._export_btn.clicked.connect(self._on_export_clicked)
-        self._export_btn.setStyleSheet(
-            "QPushButton { padding: 2px 10px; font-weight: 500; font-size: 12px; }"
-        )
-        self._export_btn.setFixedHeight(24)
         self._export_btn.hide()
-        input_layout.addWidget(self._export_btn)
-
-        # Only appears while viewing a deck's results — a bare bookmark
-        # icon, matching the Back arrow's look. Swaps to the filled
-        # "checked" icon once the current deck is saved.
-        self._save_btn = _ClickableIconLabel()
-        self._save_btn.setPixmap(tinted_pixmap(ASSETS_DIR / "bookmark-unchecked.png", "#e8a838", size=20))
-        self._save_btn.clicked.connect(self._on_save_clicked)
-        self._save_btn.hide()
-        input_layout.addWidget(self._save_btn)
+        header_row.addWidget(self._export_btn, 0, Qt.AlignVCenter)
 
         outer.addWidget(input_row)
 
@@ -388,30 +376,9 @@ class AvailabilityScreen(QWidget):
         outer.addWidget(scroll, 1)
 
     def _build_sort_button(self) -> QToolButton:
-        """Builds the "Sort" dropdown button with its exclusive (radio-
-        button-like) menu of price-high-low/price-low-high/name options.
-        Returns the assembled button."""
-        button = QToolButton()
-        button.setText(" Sort")
-        button.setIcon(tinted_icon(ASSETS_DIR / "sort.png", "#e8e8e8", size=14))
-        button.setIconSize(QSize(14, 14))
-        button.setPopupMode(QToolButton.InstantPopup)
-
-        menu = QMenu(button)
-        group = QActionGroup(menu)
-        group.setExclusive(True)
-        self._sort_actions = {}
-        for mode in (SORT_PRICE_DESC, SORT_PRICE_ASC, SORT_NAME):
-            action = QAction(SORT_LABELS[mode], menu)
-            action.setCheckable(True)
-            action.setChecked(mode == self._sort_mode)
-            action.triggered.connect(lambda checked, m=mode: self._on_sort_changed(m))
-            group.addAction(action)
-            menu.addAction(action)
-            self._sort_actions[mode] = action
-
-        button.setMenu(menu)
-        return button
+        """Builds the "Sort" dropdown button (price-high-low/price-low-
+        high/name — see ui.components.sort_button). Returns the button."""
+        return build_sort_button(SORT_LABELS, self._sort_mode, self._on_sort_changed)
 
     def _on_sort_changed(self, mode: str):
         """Slot for the Sort menu: records the new mode and re-renders
@@ -479,13 +446,19 @@ class AvailabilityScreen(QWidget):
         self._apply_filter()
         self._refresh_saved_row()
 
+    def _on_back_clicked(self):
+        if self._viewing:
+            self._on_new_check_clicked()
+        else:
+            self.back_requested.emit()
+
     def _set_viewing_deck(self, is_viewing: bool):
         """Toggles the row between the two states: blank check screen
         (URL box + Check button, saved-deck rows below) and viewing a
         checked deck's results (Back button + Sort/Export/Save, no URL
         box). The Save bookmark stays visible either way, swapping
         between its unchecked/checked icon — see _refresh_save_icon."""
-        self._back_btn.setVisible(is_viewing)
+        self._viewing = is_viewing
         self._url_input.setVisible(not is_viewing)
         self._check_btn.setVisible(not is_viewing)
         self._sort_btn.setVisible(is_viewing)

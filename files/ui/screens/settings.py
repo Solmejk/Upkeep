@@ -1,26 +1,58 @@
-"""SettingsScreen: currently just the cache-clearing controls (per-
-category checkboxes + a Clear button). Emits clear_cache_requested for
-MainWindow to actually act on.
+"""SettingsScreen: the cache-clearing controls (per-category toggles +
+a Clear button, emitting clear_cache_requested for MainWindow to act
+on), a Sync log sub-page showing when Moxfield was last synced
+(read from sync_log.py's text file), and a Search syntax sub-page (the
+guide in ui/search_help.py).
 """
 
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
+    QStackedWidget, QPlainTextEdit, QTextBrowser, QScrollArea, QSizePolicy,
 )
 
+import sync_log
+from ui.components.artist_proofs_panel import ArtistProofsPanel
+from ui.search_help import SEARCH_HELP_HTML
 from ui.components.toggle_switch import ToggleSwitch
+
+SYNC_KINDS = ("Collection", "Prices", "Decks", "Profile")
 
 
 class SettingsScreen(QWidget):
-    """User settings — currently houses cache controls; will grow over time."""
+    """User settings: cache controls, plus the Sync log and Search
+    syntax sub-pages."""
 
     clear_cache_requested = Signal(list)  # list of strings: "collection", "decks", "profile", "images"
+    proofs_changed = Signal()  # artist proofs added / changed / removed
+    refresh_requested = Signal()  # "Refresh all" (Sync section): profile, collection, prices, decks
 
-    def __init__(self):
-        """Builds the screen (just the cache section, for now)."""
+    def __init__(self, app=None):
+        """Builds the main settings page and its sub-pages (Sync log,
+        Search syntax) as pages of a stack, main page shown first."""
         super().__init__()
+        self.app = app
+        self._refreshing = False
 
-        outer = QVBoxLayout(self)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self._pages = QStackedWidget()
+        layout.addWidget(self._pages)
+
+        self._main_page = self._build_main_page()
+        self._log_page = self._build_log_page()
+        self._search_help_page = self._build_search_help_page()
+        self._proofs_page = self._build_proofs_page()
+        self._pages.addWidget(self._main_page)
+        self._pages.addWidget(self._log_page)
+        self._pages.addWidget(self._search_help_page)
+        self._pages.addWidget(self._proofs_page)
+
+    def _build_main_page(self) -> QWidget:
+        """The top-level settings page: title + sections."""
+        page = QWidget()
+        outer = QVBoxLayout(page)
         outer.setContentsMargins(40, 30, 40, 40)
         outer.setSpacing(20)
 
@@ -29,10 +61,234 @@ class SettingsScreen(QWidget):
         title.setObjectName("screenTitle")
         outer.addWidget(title)
 
-        # Cache section
-        outer.addWidget(self._build_cache_section())
+        for section in (self._build_sync_log_section(), self._build_cache_section(),
+                        self._build_search_help_section(), self._build_proofs_section()):
+            # Fixed height: in a short window the page scrolls instead of
+            # squashing the cards (toggles overlapping, buttons flattened)
+            section.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+            outer.addWidget(section)
 
         outer.addStretch()
+
+        # Scrollable — the sections don't all fit in a short window
+        scroll = QScrollArea()
+        scroll.setObjectName("decksScroll")  # transparent, borderless
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(page)
+        return scroll
+
+    def _build_sync_log_section(self) -> QWidget:
+        """The "Sync" card on the main page: Refresh all (everything from
+        Moxfield, prices from Scryfall) and a button to the log sub-page."""
+        section = QFrame()
+        section.setObjectName("settingsSection")
+        section.setMaximumWidth(480)
+
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(12)
+
+        header = QLabel("Sync")
+        header.setObjectName("settingsSectionTitle")
+        layout.addWidget(header)
+
+        description = QLabel(
+            "Refresh all fetches your profile, collection and decks from Moxfield, and your "
+            "collection's prices from Scryfall. The log shows when each was last synced.")
+        description.setObjectName("settingsDescription")
+        description.setWordWrap(True)
+        layout.addWidget(description)
+
+        button_row = QHBoxLayout()
+        button_row.addStretch()
+        view_btn = QPushButton("View log")
+        view_btn.setObjectName("backButton")  # secondary next to Refresh all
+        view_btn.clicked.connect(self._show_log_page)
+        button_row.addWidget(view_btn)
+        self._refresh_all_btn = QPushButton("Refresh all")
+        self._refresh_all_btn.clicked.connect(self.refresh_requested.emit)
+        button_row.addWidget(self._refresh_all_btn)
+        layout.addLayout(button_row)
+        self._update_refresh_button()
+
+        return section
+
+    def set_refresh_enabled(self, enabled: bool):
+        """Toggles Refresh all between normal and "Refreshing…" (disabled)
+        — called by MainWindow around the background Moxfield fetch."""
+        self._refreshing = not enabled
+        self._update_refresh_button()
+
+    def _update_refresh_button(self):
+        """Disabled while logged out or refreshing. (This screen isn't
+        rebuilt on login / logout, so it's re-checked whenever it's shown.)"""
+        self._refresh_all_btn.setEnabled(bool(self.app and self.app.is_logged_in) and not self._refreshing)
+        self._refresh_all_btn.setText("Refreshing…" if self._refreshing else "Refresh all")
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._update_refresh_button()
+
+    def _build_proofs_section(self) -> QWidget:
+        """The "Artist proofs" card on the main page: what they are and a
+        button to the management page."""
+        section = QFrame()
+        section.setObjectName("settingsSection")
+        section.setMaximumWidth(480)
+
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(12)
+
+        header = QLabel("Custom card images")
+        header.setObjectName("settingsSectionTitle")
+        layout.addWidget(header)
+
+        description = QLabel(
+            "Artist proofs, signed or altered cards — your own front and / or back image for a "
+            "printing, shown instead of the normal image everywhere and flippable in showcases."
+        )
+        description.setObjectName("settingsDescription")
+        description.setWordWrap(True)
+        layout.addWidget(description)
+
+        button_row = QHBoxLayout()
+        button_row.addStretch()
+        manage_btn = QPushButton("Edit cards")
+        manage_btn.clicked.connect(lambda: self._pages.setCurrentWidget(self._proofs_page))
+        button_row.addWidget(manage_btn)
+        layout.addLayout(button_row)
+        return section
+
+    def _build_proofs_page(self) -> QWidget:
+        """The Artist proofs sub-page: back button + ArtistProofsPanel."""
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(40, 30, 40, 40)
+        outer.setSpacing(16)
+
+        top_bar = QHBoxLayout()
+        back_btn = QPushButton("← Back")
+        back_btn.setObjectName("backButton")
+        back_btn.clicked.connect(lambda: self._pages.setCurrentWidget(self._main_page))
+        top_bar.addWidget(back_btn)
+        top_bar.addStretch()
+        outer.addLayout(top_bar)
+
+        title = QLabel("Custom card images")
+        title.setObjectName("screenTitle")
+        outer.addWidget(title)
+
+        self.proofs_panel = ArtistProofsPanel(self.app)
+        self.proofs_panel.proofs_changed.connect(self.proofs_changed.emit)
+        outer.addWidget(self.proofs_panel, 1)
+        return page
+
+    def _build_search_help_section(self) -> QWidget:
+        """The "Search syntax" card on the main page: a one-line summary
+        and a button that opens the full guide."""
+        section = QFrame()
+        section.setObjectName("settingsSection")
+        section.setMaximumWidth(480)
+
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(12)
+
+        header = QLabel("Search syntax")
+        header.setObjectName("settingsSectionTitle")
+        layout.addWidget(header)
+
+        description = QLabel(
+            "The Collection, deck and Deck Maker card searches use Scryfall's syntax, "
+            "e.g. t:creature c:g mv<=3. See every filter with examples."
+        )
+        description.setObjectName("settingsDescription")
+        description.setWordWrap(True)
+        layout.addWidget(description)
+
+        button_row = QHBoxLayout()
+        button_row.addStretch()
+        guide_btn = QPushButton("Open guide")
+        guide_btn.clicked.connect(lambda: self._pages.setCurrentWidget(self._search_help_page))
+        button_row.addWidget(guide_btn)
+        layout.addLayout(button_row)
+
+        return section
+
+    def _build_search_help_page(self) -> QWidget:
+        """The Search syntax sub-page: back button + the guide."""
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(40, 30, 40, 40)
+        outer.setSpacing(16)
+
+        top_bar = QHBoxLayout()
+        back_btn = QPushButton("← Back")
+        back_btn.setObjectName("backButton")
+        back_btn.clicked.connect(lambda: self._pages.setCurrentWidget(self._main_page))
+        top_bar.addWidget(back_btn)
+        top_bar.addStretch()
+        outer.addLayout(top_bar)
+
+        title = QLabel("Search syntax")
+        title.setObjectName("screenTitle")
+        outer.addWidget(title)
+
+        guide = QTextBrowser()
+        guide.setObjectName("searchHelp")
+        guide.setOpenExternalLinks(True)
+        guide.setHtml(SEARCH_HELP_HTML)
+        outer.addWidget(guide, 1)
+
+        return page
+
+    def _build_log_page(self) -> QWidget:
+        """The Sync log sub-page: back button, last-synced summary, and
+        the full log (newest first). Filled in by _show_log_page each
+        time it's opened, so it's never stale."""
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(40, 30, 40, 40)
+        outer.setSpacing(16)
+
+        top_bar = QHBoxLayout()
+        back_btn = QPushButton("← Back")
+        back_btn.setObjectName("backButton")
+        back_btn.clicked.connect(lambda: self._pages.setCurrentWidget(self._main_page))
+        top_bar.addWidget(back_btn)
+        top_bar.addStretch()
+        outer.addLayout(top_bar)
+
+        title = QLabel("Sync log")
+        title.setObjectName("screenTitle")
+        outer.addWidget(title)
+
+        self._last_synced_label = QLabel()
+        self._last_synced_label.setObjectName("settingsLabel")
+        outer.addWidget(self._last_synced_label)
+
+        self._log_text = QPlainTextEdit()
+        self._log_text.setObjectName("syncLogText")
+        self._log_text.setReadOnly(True)
+        self._log_text.setLineWrapMode(QPlainTextEdit.NoWrap)
+        outer.addWidget(self._log_text, 1)
+
+        return page
+
+    def _show_log_page(self):
+        """Reloads the log from disk and switches to the log sub-page."""
+        rows = []
+        for kind in SYNC_KINDS:
+            when = sync_log.last_success(kind) or "never"
+            rows.append(f"<b>{kind}:</b> {when}")
+        self._last_synced_label.setText("Last synced — " + " · ".join(rows))
+
+        lines = sync_log.read_lines()
+        self._log_text.setPlainText(
+            "\n".join(reversed(lines)) if lines else "No syncs recorded yet."
+        )
+        self._pages.setCurrentWidget(self._log_page)
 
     def _build_cache_section(self) -> QWidget:
         """Builds the "Cache" card: a toggle per category plus a "Clear

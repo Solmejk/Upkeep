@@ -1,5 +1,5 @@
 """MainWindow: the app's top-level window. Owns the sidebar, the screen
-stack (Home/Decks/Collection/Availability/Settings + the on-demand
+stack (Home/Decks/Collection/Deck Maker/Game Tracker/Other Apps/Settings + the on-demand
 DeckDetail screen), and the two shared popouts (CardModal, ExportModal).
 Also owns every cross-screen flow that doesn't belong to a single
 screen: login, logout, cache-clear, Moxfield refresh, and rebuilding the
@@ -12,19 +12,28 @@ from PySide6.QtWidgets import (
 )
 
 from app import MTGApp
+from models import deck_editing, local_decks
 from models.user import User
 from ui.sidebar import Sidebar
 from ui.screens.home import HomeScreen
 from ui.screens.decks import DecksScreen
 from ui.screens.deck_detail import DeckDetailScreen
 from ui.screens.collection import CollectionScreen
-from ui.screens.availability import AvailabilityScreen
 from ui.screens.settings import SettingsScreen
+from ui.screens.deck_maker import DeckMakerScreen
+from ui.screens.other_apps import OtherAppsScreen
+from ui.screens.game_tracker import GameTrackerScreen
 from ui.components.card_modal import CardModal
 from ui.components.export_modal import ExportModal
+from ui.components.deck_export_modal import DeckExportModal
+from ui.components.player_modal import PlayerModal
+from ui.components.tracker_deck_modal import TrackerDeckModal
 from ui.background import run_in_background
 import clearCache
+import scryfall
 import session
+import sync
+from image_prefetch import ImagePrefetcher
 
 
 class MainWindow(QMainWindow):
@@ -38,6 +47,8 @@ class MainWindow(QMainWindow):
         self.resize(1100, 750)
         self._bg_tasks = []  # keeps background tasks alive — see ui/background.py
         self._login_in_progress = False
+        self._refresh_in_progress = False
+        self._image_prefetcher = ImagePrefetcher()
 
         root = QWidget()
         root_layout = QHBoxLayout(root)
@@ -50,15 +61,19 @@ class MainWindow(QMainWindow):
         self.home_screen = HomeScreen(app)
         self.decks_screen = DecksScreen(app)
         self.collection_screen = CollectionScreen(app)
-        self.availability_screen = AvailabilityScreen(app)
-        self.settings_screen = SettingsScreen()
+        self.deck_maker_screen = DeckMakerScreen(app)
+        self.game_tracker_screen = GameTrackerScreen(app)
+        self.other_apps_screen = OtherAppsScreen(app)
+        self.settings_screen = SettingsScreen(app)
 
-        self.deck_detail_screen = DeckDetailScreen()
+        self.deck_detail_screen = DeckDetailScreen(app)
 
         self._add_page("Home",         self.home_screen)
         self._add_page("Decks",        self.decks_screen)
         self._add_page("Collection",   self.collection_screen)
-        self._add_page("Availability", self.availability_screen)
+        self._add_page("Deck Maker",   self.deck_maker_screen)
+        self._add_page("Game Tracker", self.game_tracker_screen)
+        self._add_page("Other Apps",   self.other_apps_screen)
         self._add_page("Settings",     self.settings_screen)
 
         self.stack.addWidget(self.deck_detail_screen)
@@ -68,10 +83,24 @@ class MainWindow(QMainWindow):
         self.sidebar.login_requested.connect(self._on_login_requested)
 
         self.decks_screen.deck_selected.connect(self._open_deck_detail)
+        self.decks_screen.delete_requested.connect(self._delete_deck)
+        self.decks_screen.deck_imported.connect(self._on_deck_imported)
         self.deck_detail_screen.back_requested.connect(self._close_deck_detail)
+        self.deck_detail_screen.delete_requested.connect(self._delete_deck)
+        self.deck_detail_screen.edit_requested.connect(self._edit_deck)
+        # confirmed languages change which exact copies count as used
+        self.deck_detail_screen.languages_changed.connect(self.deck_maker_screen.refresh_usage)
 
-        # Refresh from Moxfield (home screen button)
-        self.home_screen.refresh_requested.connect(self._refresh_from_moxfield)
+        # Refresh from Moxfield (home: everything; decks/collection: just that part)
+        self._connect_refresh_buttons()
+
+        # Artist proofs changed (settings screen): show the new images
+        self.settings_screen.proofs_changed.connect(self._on_proofs_changed)
+
+        # Full Moxfield refresh (settings screen: Sync → Refresh all) — the
+        # settings screen isn't rebuilt, so this is connected once
+        self.settings_screen.refresh_requested.connect(
+            lambda: self._start_refresh(sync.refresh_all, "Settings", "settings_screen"))
 
         # Cache clearing (settings screen)
         self.settings_screen.clear_cache_requested.connect(self._clear_cache)
@@ -84,12 +113,26 @@ class MainWindow(QMainWindow):
         # Card modal — shared by every screen that shows a clickable card
         self.card_modal = CardModal(self)
         self.deck_detail_screen.card_clicked.connect(self.card_modal.show_card)
+        self.deck_detail_screen.tracker_deck_clicked.connect(self._show_tracker_deck)
+        self.card_modal.token_printing_changed.connect(self._on_token_printing_changed)
         self.collection_screen.card_clicked.connect(self.card_modal.show_card)
-        self.availability_screen.card_clicked.connect(self.card_modal.show_card)
+        self.deck_maker_screen.card_clicked.connect(self.card_modal.show_card)
+        self.other_apps_screen.card_clicked.connect(self.card_modal.show_card)
+        self.deck_maker_screen.deck_saved.connect(self._rebuild_data_screens)  # show it on Decks etc.
 
         # Export modal (availability screen)
         self.export_modal = ExportModal(self)
-        self.availability_screen.export_requested.connect(self.export_modal.show_export)
+        self.other_apps_screen.export_requested.connect(self.export_modal.show_export)  # Availability Checker
+
+        # Player popout (Game Tracker: click a player's name)
+        self.player_modal = PlayerModal(self)
+        self.game_tracker_screen.player_clicked.connect(self._show_player)
+        self.tracker_deck_modal = TrackerDeckModal(self)
+        self.game_tracker_screen.deck_clicked.connect(self._show_tracker_deck)
+
+        # Moxfield export modal (Deck Maker decks, from the deck detail screen)
+        self.deck_export_modal = DeckExportModal(self)
+        self.deck_detail_screen.export_requested.connect(self.deck_export_modal.show_export)
 
         QTimer.singleShot(50, self._lazy_load_decks)
 
@@ -116,19 +159,114 @@ class MainWindow(QMainWindow):
 
     def _close_deck_detail(self):
         """Slot for DeckDetailScreen.back_requested: returns to the Decks
-        screen."""
+        screen. The deck's active/archived flag may have been toggled on
+        the detail screen, so the Decks grid (active-only filter) and
+        Home (active/archived counts) are rebuilt to reflect it."""
+        self.decks_screen._rebuild_grid()
+        self._replace_screen("home_screen", HomeScreen(self.app))
+        self._connect_home_refresh()
         self.stack.setCurrentWidget(self.decks_screen)
 
-    def _refresh_from_moxfield(self):
-        """Slot for HomeScreen.refresh_requested: force-reloads the
-        current user's profile/collection/decks from Moxfield in the
-        background. No-ops with a warning if nobody's logged in."""
+    def _show_tracker_deck(self, deck_key):
+        """Game Tracker / Home: a deck was clicked — its popout."""
+        if self.stack.currentWidget() is not self.game_tracker_screen:
+            self.game_tracker_screen.reload()  # fresh data (e.g. clicked from Home)
+        self.tracker_deck_modal.show_deck(
+            self.game_tracker_screen.tracker, deck_key, self.game_tracker_screen.player_label)
+
+    def _show_player(self, player_id: str):
+        """Game Tracker / Home: a player's name was clicked — their popout."""
+        if self.stack.currentWidget() is not self.game_tracker_screen:
+            self.game_tracker_screen.reload()  # fresh data (e.g. clicked from Home)
+        tracker = self.game_tracker_screen.tracker
+        player = tracker.players[player_id]
+        you = (self.app.is_logged_in and player.kind == "moxfield"
+               and player.username.lower() == self.app.username.lower())
+        self.player_modal.show_player(tracker, player_id, you)
+
+    def _on_deck_imported(self, deck_id: str):
+        """A decklist was imported (Decks screen): reload the deck lists so
+        it shows up everywhere, then open it."""
+        self._rebuild_data_screens()
+        deck = next((d for d in self.app.decks if d.deck_id == deck_id), None)
+        if deck is not None:
+            self._open_deck_detail(deck)
+
+    def _on_token_printing_changed(self):
+        """A token's default printing changed (card popup): redraw the
+        open deck's Tokens section with it."""
+        if self.deck_detail_screen.deck is not None:
+            self.deck_detail_screen._rebuild_sections()
+
+    def _on_proofs_changed(self):
+        """Artist proofs were added / changed / removed: rebuild the data
+        screens (fresh image loads) and reload the Deck Maker's grids."""
+        self._rebuild_data_screens()
+        self.deck_maker_screen.reload_images()
+
+    def _edit_deck(self, deck):
+        """Slot for DeckDetailScreen.edit_requested: opens the deck in the
+        Deck Maker — the deck itself for Deck Maker decks (saving updates
+        it), a new copy for website imports."""
+        try:
+            draft, left_out = deck_editing.draft_from_deck(deck, self.app.collection.cards, copy=deck.is_imported)
+        except deck_editing.EditError as e:
+            QMessageBox.warning(self, "Can't edit deck", str(e))
+            return
+        if self.deck_maker_screen.open_draft(draft, left_out):
+            self.sidebar.set_current(self.stack.indexOf(self.deck_maker_screen))
+
+    def _delete_deck(self, deck):
+        """Slot for delete_requested (Decks tile menu / DeckDetail button):
+        after confirming, deletes a Deck Maker deck's file and reloads the
+        deck lists. Website imports can't be deleted (ignored)."""
+        if deck is None or deck.is_imported:
+            return
+        reply = QMessageBox.question(
+            self, "Delete deck", f"Delete \"{deck.name}\"? This can't be undone.",
+        )
+        if reply != QMessageBox.Yes:
+            return
+        local_decks.delete(deck.deck_id)
+        self.deck_maker_screen.forget_saved_deck(deck.deck_id)
+        if self.stack.currentWidget() is self.deck_detail_screen:
+            self.stack.setCurrentWidget(self.decks_screen)
+        self._rebuild_data_screens()
+
+    def _connect_refresh_buttons(self):
+        """Wires the Home/Decks/Collection refresh buttons. Called again
+        after _rebuild_data_screens replaces those screens."""
+        self._connect_home_refresh()
+        self.decks_screen.refresh_requested.connect(
+            lambda: self._start_refresh(sync.refresh_decks, "Decks page", "decks_screen"))
+        self.collection_screen.refresh_requested.connect(
+            lambda: self._start_refresh(sync.refresh_collection, "Collection page", "collection_screen"))
+
+    def _connect_home_refresh(self):
+        """Wires the Home screen's showcase cards' info popout — again
+        after each rebuild. (The full refresh is Settings → Refresh all.)"""
+        self.home_screen.card_clicked.connect(lambda card: self.card_modal.show_card(card))
+        # Game Tracker card: your Elo -> your popout, best deck -> its popout
+        self.home_screen.player_clicked.connect(self._show_player)
+        self.home_screen.deck_clicked.connect(self._show_tracker_deck)
+
+    def _start_refresh(self, job, source: str, screen_attr: str):
+        """Runs a sync.refresh_* job for the current user in the
+        background. source: label for the sync log. screen_attr: the
+        screen whose button was clicked (e.g. "decks_screen") — looked
+        up by name since the screen object is replaced on rebuild.
+        Ignored while another refresh is running; warns if logged out."""
         if not self.app.is_logged_in:
             QMessageBox.information(self, "Not logged in", "Log in first via the sidebar avatar.")
             return
-        self.home_screen.set_refresh_enabled(False)
+        if self._refresh_in_progress:
+            return
+        self._refresh_in_progress = True
+        self._refreshing_screen_attr = screen_attr
+        getattr(self, screen_attr).set_refresh_enabled(False)
+        user = self.app.user
         run_in_background(
-            lambda: self.app.user.load(force=True),
+            lambda: job(user, source),
             self._bg_tasks,
             on_finished=self._on_refresh_finished,
             on_failed=self._on_refresh_failed,
@@ -136,15 +274,17 @@ class MainWindow(QMainWindow):
 
     def _on_refresh_finished(self, _result):
         """Background-task callback: rebuilds the data screens to show
-        the freshly-fetched data and re-enables the refresh button.
-        _result is User.load's return value (None), unused."""
+        the freshly-fetched data (the rebuilt screens come with their
+        refresh buttons enabled). _result is unused (jobs return None)."""
+        self._refresh_in_progress = False
         self._rebuild_data_screens()
-        self.home_screen.set_refresh_enabled(True)
+        self.settings_screen.set_refresh_enabled(True)  # not rebuilt, unlike the others
 
     def _on_refresh_failed(self, message: str):
         """Background-task callback: re-enables the refresh button and
         surfaces the error. message: str(exception) from the failed fetch."""
-        self.home_screen.set_refresh_enabled(True)
+        self._refresh_in_progress = False
+        getattr(self, self._refreshing_screen_attr).set_refresh_enabled(True)
         QMessageBox.warning(self, "Refresh failed", message)
 
     def _on_login_requested(self):
@@ -184,7 +324,7 @@ class MainWindow(QMainWindow):
         with a half-loaded empty one. Raises on failure (caught by
         run_in_background, routed to _on_login_failed)."""
         user = User(username)
-        user.load(force=True)
+        sync.refresh_all(user, "Login")
         return user
 
     def _on_login_finished(self, user: User):
@@ -242,13 +382,19 @@ class MainWindow(QMainWindow):
         self.sidebar.refresh_profile(self.app)
 
         self._replace_screen("home_screen", HomeScreen(self.app))
-        self.home_screen.refresh_requested.connect(self._refresh_from_moxfield)
 
         self._replace_screen("decks_screen", DecksScreen(self.app))
         self.decks_screen.deck_selected.connect(self._open_deck_detail)
+        self.decks_screen.delete_requested.connect(self._delete_deck)
+        self.decks_screen.deck_imported.connect(self._on_deck_imported)
 
         self._replace_screen("collection_screen", CollectionScreen(self.app))
         self.collection_screen.card_clicked.connect(self.card_modal.show_card)
+
+        self._connect_refresh_buttons()
+
+        # Not rebuilt (that would lose a deck in progress) — just re-read
+        self.deck_maker_screen.reload_collection()
 
         self._lazy_load_decks()  # re-fetch each deck's contents in the background
 
@@ -277,6 +423,12 @@ class MainWindow(QMainWindow):
             self.card_modal.resize(self.size())
         if hasattr(self, "export_modal") and self.export_modal.isVisible():
             self.export_modal.resize(self.size())
+        if hasattr(self, "deck_export_modal") and self.deck_export_modal.isVisible():
+            self.deck_export_modal.resize(self.size())
+        if hasattr(self, "player_modal") and self.player_modal.isVisible():
+            self.player_modal.resize(self.size())
+        if hasattr(self, "tracker_deck_modal") and self.tracker_deck_modal.isVisible():
+            self.tracker_deck_modal.resize(self.size())
 
     def _lazy_load_decks(self):
         """Kicks off loading every deck's contents in the background, so
@@ -292,16 +444,16 @@ class MainWindow(QMainWindow):
     def _load_all_deck_contents(self):
         """Background-task body: loads every deck that isn't already
         loaded, cache-only first, falling back to a forced fetch if the
-        cache is missing (e.g. cleared). One deck failing to fetch
-        doesn't stop the rest."""
+        cache is missing (e.g. cleared) or in an older format (see
+        Deck.outdated). One deck failing to fetch doesn't stop the rest."""
         for deck in self.app.decks:
             if not deck.cards:
                 deck.load()
-                if not deck.cards:  # cache missing (e.g. cache was cleared) — fetch it
-                    try:
-                        deck.load(force=True)
-                    except Exception:
-                        pass  # one deck failing to fetch shouldn't block the rest
+            if not deck.cards or deck.outdated:  # missing/outdated cache — fetch it
+                try:
+                    deck.load(force=True)
+                except Exception:
+                    pass  # one deck failing to fetch shouldn't block the rest
 
     def _on_decks_loaded(self, _result):
         """Background-task callback: refreshes the Decks screen's grid
@@ -310,3 +462,24 @@ class MainWindow(QMainWindow):
         # Trigger the decks screen to refresh now that data is available
         if hasattr(self.decks_screen, "_rebuild_grid"):
             self.decks_screen._rebuild_grid()
+        self.deck_maker_screen.refresh_usage()  # "used in another deck" marks need deck contents
+        self._prefetch_images()
+
+    def _prefetch_images(self):
+        """Starts downloading every deck and collection image that isn't
+        cached yet, in the background (see image_prefetch.py) — decks
+        first, since they're fewer. Runs once deck contents are loaded:
+        after startup and after every refresh/login/cache-clear rebuild
+        (each restart cancels the previous run)."""
+        items = {}  # cache_name -> url (dict dedupes, keeps order)
+        for deck in self.app.decks:
+            if deck.commanders and deck.commanders[0].get("image_url"):
+                items.setdefault(scryfall.card_image_cache_name(deck.commanders[0]), deck.commanders[0]["image_url"])
+            for card in deck.cards:
+                if card.get("image_url"):
+                    items.setdefault(scryfall.card_image_cache_name(card), card["image_url"])
+        for entry in self.app.collection.cards:
+            url = scryfall.image_url(entry["card"].get("scryfall_id", ""))
+            if url:
+                items.setdefault(scryfall.card_image_cache_name(entry["card"]), url)
+        self._image_prefetcher.start((url, name) for name, url in items.items())

@@ -17,6 +17,20 @@ DECKS_DIR = CACHE_DIR / "decks"
 DECK_STATES_PATH = CACHE_DIR / "deck_states.json"
 SESSION_PATH = CACHE_DIR / "session.json"
 SAVED_AVAILABILITY_DECKS_PATH = CACHE_DIR / "saved_availability_decks.json"
+SYNC_LOG_PATH = CACHE_DIR / "sync_log.txt"
+COLLECTION_PRICES_PATH = CACHE_DIR / "collection_prices.json"  # Scryfall prices, see scryfall_prices.py
+
+# User-created data — NOT cache: clearCache never touches this folder.
+DATA_DIR = FILES_ROOT / "data"
+LOCAL_DECKS_DIR = DATA_DIR / "decks"  # decks built in the Deck Maker
+DECK_LANGUAGES_PATH = DATA_DIR / "deck_languages.json"  # confirmed card languages per Moxfield deck
+SHOWCASES_PATH = DATA_DIR / "showcases.json"  # Home screen showcases
+GAME_TRACKER_PATH = DATA_DIR / "game_tracker.json"  # players + games, see models.game_tracker
+TOKEN_PRINTINGS_PATH = DATA_DIR / "token_printings.json"  # chosen default printing per token
+PRICE_HISTORY_PATH = DATA_DIR / "price_history.json"  # per-printing prices per day, see models.price_history
+ARTIST_PROOFS_DIR = DATA_DIR / "artist_proofs"  # the user's proof images (copied in)
+ARTIST_PROOFS_PATH = DATA_DIR / "artist_proofs.json"  # proof index: "set|cn" -> files
+PURCHASES_DIR = DATA_DIR / "purchases"  # imported Cardmarket purchases, one JSON each
 
 
 def user_cache_path(username: str) -> Path:
@@ -35,6 +49,22 @@ def decks_list_cache_path(username: str) -> Path:
     return CACHE_DIR / f"decks_{username}.json"
 
 
+def local_deck_path(deck_id: str) -> Path:
+    """Path to a Deck Maker deck's JSON (same format as deck_cache_path's
+    files, plus "source": "local")."""
+    return LOCAL_DECKS_DIR / f"{deck_id}.json"
+
+
 def deck_cache_path(deck_id: str) -> Path:
     """Path to one deck's cached contents JSON."""
     return DECKS_DIR / f"{deck_id}.json"
+
+
+def purchase_path(purchase_id: str) -> Path:
+    """Path to one imported purchase's JSON (see models.purchases)."""
+    return PURCHASES_DIR / f"{purchase_id}.json"
+
+
+def value_history_path(username: str) -> Path:
+    """Path to a user's collection-value history (see models.value_history)."""
+    return DATA_DIR / f"value_history_{username}.json"

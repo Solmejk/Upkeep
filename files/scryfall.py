@@ -71,6 +71,24 @@ def card_image_cache_name(card: dict) -> str:
     return f"card_{card_key(card)}"
 
 
+# The standard Magic card back (Scryfall's default card_back_id)
+MAGIC_BACK_URL = "https://backs.scryfall.io/normal/0/a/0aeebaf5-8c7d-4636-9e82-8c27447861f7.jpg"
+MAGIC_BACK_CACHE_NAME = "magic_card_back"
+
+
+def back_image_url(scryfall_id: str) -> str:
+    """A double-faced card's back face image ("" without an ID)."""
+    if not scryfall_id:
+        return ""
+    return f"https://cards.scryfall.io/normal/back/{scryfall_id[0]}/{scryfall_id[1]}/{scryfall_id}.jpg"
+
+
+def back_cache_name(card: dict) -> str:
+    """Cache name for a printing's back image (a double-faced card's back
+    face, or an artist proof's back — see models.artist_proofs)."""
+    return f"back_{card_key(card)}"
+
+
 def _search_prints(query: str) -> list[dict]:
     """Runs one rate-limited Scryfall card-search query, sorted by EUR
     price ascending. query: a full Scryfall search query string (already
@@ -131,3 +149,60 @@ def cheapest_prices_eur(card_names: list[str]) -> dict[str, dict | None]:
                 results[name] = {"price": float(price), "set": p.get("set", "")}
 
     return results
+
+
+COLLECTION_URL = "https://api.scryfall.com/cards/collection"
+COLLECTION_BATCH = 75  # Scryfall's max identifiers per /cards/collection request
+
+
+def cards_collection(identifiers: list[dict]) -> list[dict]:
+    """Looks up many specific cards at once via Scryfall's
+    /cards/collection endpoint (75 identifiers per request, rate-limited
+    like every other call here). identifiers: Scryfall identifier dicts,
+    e.g. {"set": "khm", "collector_number": "12"}, {"name": "Opt",
+    "set": "xln"} or {"name": "Opt"}. Returns the found card objects (in
+    no guaranteed relation to the input — match them up by set/number or
+    name). Raises on network errors, so a failed lookup isn't mistaken
+    for "card doesn't exist"."""
+    found = []
+    for i in range(0, len(identifiers), COLLECTION_BATCH):
+        batch = identifiers[i:i + COLLECTION_BATCH]
+        for attempt in range(2):
+            _rate_limiter.wait()
+            response = requests.post(
+                COLLECTION_URL, json={"identifiers": batch}, headers=HEADERS, timeout=30,
+            )
+            if response.status_code == 429 and attempt == 0:
+                time.sleep(5)
+                continue
+            response.raise_for_status()
+            found.extend(response.json().get("data", []))
+            break
+    return found
+
+
+CARD_URL = "https://api.scryfall.com/cards/"
+
+
+def all_paper_printings(scryfall_id: str) -> list[dict]:
+    """Every paper printing of the same card (same oracle) as the given
+    printing, newest first — tokens included (include_extras). One request
+    to find its oracle ID, then one per 175 printings. Raises on network
+    errors."""
+    _rate_limiter.wait()
+    response = requests.get(CARD_URL + scryfall_id, headers=HEADERS, timeout=15)
+    response.raise_for_status()
+    oracle_id = response.json().get("oracle_id")
+    if not oracle_id:
+        return []
+    params = {"q": f"oracleid:{oracle_id} -is:digital", "unique": "prints",
+              "include_extras": "true", "order": "released", "dir": "desc"}
+    url, printings = SEARCH_URL, []
+    while url:
+        _rate_limiter.wait()
+        response = requests.get(url, params=params, headers=HEADERS, timeout=15)
+        response.raise_for_status()
+        page = response.json()
+        printings.extend(page.get("data", []))
+        url, params = page.get("next_page"), None  # next_page already has the query
+    return printings

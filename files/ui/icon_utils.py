@@ -7,7 +7,8 @@ color via SourceIn compositing, leaving its shape untouched.
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PySide6.QtCore import QPointF
+from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap, QPen, QPainterPath
 
 
 def tinted_pixmap(path: Path, color: QColor | str, size: int = 16) -> QPixmap:
@@ -31,3 +32,22 @@ def tinted_pixmap(path: Path, color: QColor | str, size: int = 16) -> QPixmap:
 def tinted_icon(path: Path, color: QColor | str, size: int = 16) -> QIcon:
     """tinted_pixmap(), wrapped as a QIcon for setIcon()."""
     return QIcon(tinted_pixmap(path, color, size))
+
+
+def check_icon(color: QColor | str = "#4caf50", size: int = 18) -> QIcon:
+    """A drawn checkmark (no asset needed) — e.g. a received purchase.
+    color=None gives an empty icon of the same size, so rows with and
+    without a check stay aligned."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+    if color is not None:
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        pen = QPen(QColor(color), size * 0.16, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        painter.setPen(pen)
+        path = QPainterPath(QPointF(size * 0.18, size * 0.52))
+        path.lineTo(size * 0.42, size * 0.76)
+        path.lineTo(size * 0.84, size * 0.26)
+        painter.drawPath(path)
+        painter.end()
+    return QIcon(pixmap)

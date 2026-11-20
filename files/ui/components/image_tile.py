@@ -5,11 +5,20 @@ tiles. CardGridView (the Collection screen's virtualized grid) uses the
 pixmap helpers directly rather than ImageTile itself, for performance.
 """
 
+import html
+
 from PySide6.QtCore import Qt, Signal, QRectF
 from PySide6.QtGui import QPixmap, QPainter, QPainterPath, QColor, QImage, QLinearGradient
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
 
 from ui.image_loader import ImageLoader
+
+# The picture's hover border (style.qss: QLabel#imageTilePicture, 2px). The
+# image is drawn inside it — BORDER px smaller on every side, corners
+# BORDER px less rounded — so the border's curve and the image's corners
+# share a center and the hover outline hugs the card all the way round
+# (drawn the full size, the image covered the border near the corners).
+BORDER = 2
 
 
 def round_pixmap(pixmap: QPixmap, radius: int) -> QPixmap:
@@ -101,6 +110,7 @@ class ImageTile(QWidget):
         height: int = 310,
         radius: int = 12,
         status_color: QColor | None = None,
+        caption_badge: tuple[str, str] | None = None,
     ):
         """image_url: image to fetch (request_image_load() kicks this
         off — not automatic, since callers may want to defer loading
@@ -110,14 +120,20 @@ class ImageTile(QWidget):
         represents). width/height/radius: tile image size and corner
         rounding. status_color: optional translucent tint + matching
         hover-border color (used by the availability screen; omit for a
-        plain tile)."""
+        plain tile). caption_badge: optional (text, color) shown bold before
+        the caption — e.g. the Decks screen's purple "M" for Moxfield
+        decks, like the collection grid's yellow "F" for foils."""
         super().__init__()
         self.payload = payload
         self._image_url = image_url
         self._cache_name = cache_name
         self._width = width
         self._height = height
-        self._radius = radius
+        self._radius = radius  # the tile's (and its hover border's) outer corner radius
+        # the image itself, inside the border (see BORDER)
+        self._img_w = width - 2 * BORDER
+        self._img_h = height - 2 * BORDER
+        self._img_radius = max(radius - BORDER, 0)
         self._loaded = False
         self._requested = False
         self._status_color = status_color
@@ -133,21 +149,34 @@ class ImageTile(QWidget):
         self._image_label.setObjectName("imageTilePicture")
         self._image_label.setFixedSize(width, height)
         self._image_label.setAlignment(Qt.AlignCenter)
-        self._image_label.setPixmap(self._tinted(make_placeholder(width, height, radius)))
+        self._image_label.setPixmap(self._tinted(make_placeholder(self._img_w, self._img_h, self._img_radius)))
         self._image_label.clicked.connect(lambda: self.clicked.emit(self.payload))
+        # The hover border's corners follow this tile's own corner radius —
+        # with the app-wide 14px, a tile rounded less (e.g. small 6-8px
+        # tiles) had its image corners poke out over the border, so the
+        # yellow vanished there.
+        style = f"QLabel#imageTilePicture {{ border-radius: {radius}px; }}"
         if status_color is not None:
-            # Overrides just the hover-border color from the app-wide
-            # stylesheet (QLabel#imageTilePicture:hover) for this instance —
-            # the base border/background/radius rules still apply.
-            self._image_label.setStyleSheet(
-                f"QLabel#imageTilePicture:hover {{ border: 2px solid {status_color.name()}; }}"
-            )
+            # also overrides the hover-border color from the app-wide
+            # stylesheet (QLabel#imageTilePicture:hover) for this instance
+            style += f" QLabel#imageTilePicture:hover {{ border: 2px solid {status_color.name()}; }}"
+        self._image_label.setStyleSheet(style)
         
-        caption_label = ClickableLabel(caption)
+        caption_label = ClickableLabel()
+        if caption_badge is not None:
+            badge_text, badge_color = caption_badge
+            caption_label.setTextFormat(Qt.RichText)
+            caption_label.setText(
+                f'<span style="color:{badge_color};">{html.escape(badge_text)}</span>'
+                f'&nbsp;&nbsp;{html.escape(caption)}'
+            )
+        else:
+            caption_label.setTextFormat(Qt.PlainText)
+            caption_label.setText(caption)
         caption_label.setObjectName("imageTileCaption")
         caption_label.setAlignment(Qt.AlignCenter)
         caption_label.setWordWrap(True)
-        caption_label.setFixedHeight(32)
+        caption_label.setFixedHeight(32)  # two lines
         caption_label.clicked.connect(lambda: self.clicked.emit(self.payload))
         
         layout.addWidget(self._image_label)
@@ -163,7 +192,7 @@ class ImageTile(QWidget):
         painter = QPainter(result)
         color = QColor(self._status_color)
         color.setAlpha(90)
-        paint_tint_overlay(painter, QRectF(0, 0, result.width(), result.height()), self._radius, color)
+        paint_tint_overlay(painter, QRectF(0, 0, result.width(), result.height()), self._img_radius, color)
         painter.end()
         return result
 
@@ -176,9 +205,10 @@ class ImageTile(QWidget):
             token=id(self),
             url=self._image_url,
             cache_name=self._cache_name,
-            width=self._width,
-            height=self._height,
-            radius=self._radius,
+            width=self._img_w,
+            height=self._img_h,
+            radius=self._img_radius,
+            fill=True,  # exactly the image box, so the hover border lines up all round
             on_ready=self._on_image_ready,
             on_failed=self._on_image_failed,
         )

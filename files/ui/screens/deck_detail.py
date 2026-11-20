@@ -4,13 +4,25 @@ and its cards grouped by type in a scrollable grid (via
 ui.components.card_section).
 """
 
+import html
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea, QInputDialog,
 )
 
+import availability
+import deck_stats
+from card_fields import plural
+from models import deck_languages, local_decks
+from models import token_printings
+from ui.components.card_section import build_card_section, rebuild_card_sections, quantity_caption
+from ui.components.deck_stats_row import DeckStatsRow, average_text
+from ui.components.deck_elo_block import DeckEloBlock
+from ui.components.player_modal import elo_color
+from ui.components.language_check_dialog import LanguageCheckDialog
+from ui.components.search_box import SearchBox
 from ui.components.toggle_switch import ToggleSwitch
-from ui.components.card_section import rebuild_card_sections, quantity_caption
 
 
 class DeckDetailScreen(QWidget):
@@ -19,14 +31,23 @@ class DeckDetailScreen(QWidget):
     in DecksScreen (see MainWindow._open_deck_detail)."""
 
     back_requested = Signal()  # emitted when the Back button is clicked
+    delete_requested = Signal(object)  # emitted with the Deck when "Delete deck" is clicked (local decks only)
+    export_requested = Signal(object)  # emitted with the Deck when "Export" is clicked (local decks only)
+    edit_requested = Signal(object)  # emitted with the Deck: "Edit deck" (local) / "Edit a copy" (imported)
     card_clicked = Signal(dict)  # emitted with a card dict when a tile is clicked
+    tracker_deck_clicked = Signal(object)  # the Elo block was clicked — the deck's Game Tracker popout
 
-    def __init__(self):
+    languages_changed = Signal()  # card languages were confirmed for a Moxfield deck
+
+    def __init__(self, app=None):
         """Builds the (initially empty) screen chrome — back button,
         name/value header, active/archived toggle, and the scrollable
-        section container. Populated later by show_deck()."""
+        section container. Populated later by show_deck(). app: the
+        MTGApp, for checking deck cards against the collection."""
         super().__init__()
+        self.app = app
         self.deck = None
+        self._search_predicate = None  # card filter from the search box, or None
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -41,6 +62,11 @@ class DeckDetailScreen(QWidget):
         back_btn.clicked.connect(self.back_requested.emit)
         top_bar.addWidget(back_btn)
         top_bar.addStretch()
+
+        # Card search within this deck (Scryfall syntax)
+        self._search = SearchBox("Search this deck… e.g. t:creature mv<=2", context_fn=self._search_context)
+        self._search.search_changed.connect(self._on_search_changed)
+        top_bar.addWidget(self._search)
         outer.addLayout(top_bar)
 
         # Header (name + value on left, active toggle on right)
@@ -57,20 +83,54 @@ class DeckDetailScreen(QWidget):
 
         self.title_label = QLabel()
         self.title_label.setObjectName("screenTitle")
+        self.title_label.setTextFormat(Qt.RichText)  # name + Game Tracker Elo (see show_deck)
         left_layout.addWidget(self.title_label)
 
         self.value_label = QLabel()
         self.value_label.setObjectName("deckDetailValue")
         left_layout.addWidget(self.value_label)
 
+        self._avg_mv_label = QLabel()
+        self._avg_mv_label.setObjectName("settingsLabel")
+        left_layout.addWidget(self._avg_mv_label)
+
+        # Moxfield decks: cards whose printing is owned in another / several
+        # languages — click to confirm which copies the deck uses
+        self._language_btn = QPushButton()
+        self._language_btn.setObjectName("languageWarning")
+        self._language_btn.setCursor(Qt.PointingHandCursor)
+        self._language_btn.clicked.connect(self._open_language_check)
+        left_layout.addWidget(self._language_btn, 0, Qt.AlignLeft)
+
         header_layout.addWidget(left_column)
         header_layout.addStretch()
 
-        # Right: active label + toggle
+        # Right: delete button (Deck Maker decks only) + active label + toggle
         toggle_row = QWidget()
         toggle_layout = QHBoxLayout(toggle_row)
         toggle_layout.setContentsMargins(0, 0, 0, 0)
         toggle_layout.setSpacing(8)
+
+        # Deck Maker decks without a commander (e.g. an imported list)
+        self._commander_btn = QPushButton("Set commander…")
+        self._commander_btn.setToolTip("Choose which of this deck's cards is its commander")
+        self._commander_btn.clicked.connect(self._choose_commander)
+        toggle_layout.addWidget(self._commander_btn)
+
+        self._edit_btn = QPushButton("Edit deck")
+        self._edit_btn.clicked.connect(lambda: self.edit_requested.emit(self.deck))
+        toggle_layout.addWidget(self._edit_btn)
+
+        self._export_btn = QPushButton("Export")
+        self._export_btn.setToolTip("Copy this deck as a Moxfield import list")
+        self._export_btn.clicked.connect(lambda: self.export_requested.emit(self.deck))
+        toggle_layout.addWidget(self._export_btn)
+
+        self._delete_btn = QPushButton("Delete deck")
+        self._delete_btn.setObjectName("deleteDeckButton")
+        self._delete_btn.clicked.connect(lambda: self.delete_requested.emit(self.deck))
+        toggle_layout.addWidget(self._delete_btn)
+        toggle_layout.addSpacing(16)
 
         self.active_label = QLabel("Active")
         self.active_label.setObjectName("activeLabel")
@@ -83,6 +143,15 @@ class DeckDetailScreen(QWidget):
         header_layout.addWidget(toggle_row)
 
         outer.addWidget(header)
+
+        # Stats row: mana curve, color balance, mana production (shared with
+        # the Deck Maker's card preview)
+        self._stats_row = DeckStatsRow()
+        self._stats_row.setContentsMargins(40, 0, 40, 24)
+        self._elo_block = DeckEloBlock()  # Game Tracker Elo, first in the stats row
+        self._elo_block.clicked.connect(self.tracker_deck_clicked.emit)
+        self._stats_row.insert_first(self._elo_block)
+        outer.addWidget(self._stats_row)
 
         # Scrollable card sections
         scroll = QScrollArea()
@@ -104,10 +173,114 @@ class DeckDetailScreen(QWidget):
         rebuilds the card grid. `deck` is a models.deck.Deck with its
         contents already loaded (callers load it first if needed)."""
         self.deck = deck
+        self._search.clear()
+        self._search_predicate = None
         self.title_label.setText(deck.name)
         self.value_label.setText(f"€{deck.value:.2f}")
+        self._avg_mv_label.setText(average_text(deck.cards))
+        commander_names = {c["name"] for c in deck.commanders}
+        self._stats_row.set_cards(deck.cards, deck_stats.commander_identity(deck.cards, commander_names))
+        tracker_stats = self._elo_block.show_deck(self.app, deck)
+        # the title: "Deck name  1522 Elo" (just the name without recorded games)
+        if tracker_stats is None:
+            self.title_label.setText(html.escape(deck.name))
+        else:
+            self.title_label.setText(
+                f"{html.escape(deck.name)}&nbsp;&nbsp;"
+                f"<span style='color:{elo_color(tracker_stats.elo)}'>{tracker_stats.elo:.0f}</span>"
+                f"<span style='color:#888888; font-size:14px; font-weight:normal'> Elo</span>")
+        self._display_cards = self._cards_with_languages()
+        self._refresh_language_warning()
+        # Deck Maker decks only: website imports can't be deleted, and are
+        # already on that website
+        self._export_btn.setVisible(not deck.is_imported)
+        self._commander_btn.setVisible(not deck.is_imported and not deck.commanders)
+        self._delete_btn.setVisible(not deck.is_imported)
+        # website imports aren't changed — editing makes a Deck Maker copy
+        self._edit_btn.setText("Edit a copy" if deck.is_imported else "Edit deck")
+        self._edit_btn.setToolTip(
+            "Make your own copy of this deck to edit in the Deck Maker" if deck.is_imported
+            else "Edit this deck in the Deck Maker"
+        )
         self._refresh_active_button()
         self._rebuild_sections()
+
+    def _choose_commander(self):
+        """Set commander…: pick one of the deck's possible commanders, save
+        it into the deck file and show the deck again with it."""
+        names = sorted(dict.fromkeys(local_decks.commander_candidates(self.deck.cards)))
+        name, ok = QInputDialog.getItem(self, "Set commander", "Commander:", names, 0, False)
+        if not ok or not name:
+            return
+        local_decks.set_commander(self.deck.deck_id, name)
+        self.deck.load()
+        self.show_deck(self.deck)
+
+    def _search_context(self) -> dict:
+        """card_search context: is:unique — the collection holds exactly
+        one copy of the card (is:used isn't meaningful here: every card in
+        a deck is in a deck)."""
+        if not self.app:
+            return {}
+        return {"is": {"unique": availability.unique_check(self.app.collection.cards)}}
+
+    def _cards_with_languages(self) -> list:
+        """The deck's cards as shown (tiles, card popup, search), each with
+        the language of the copies it uses: the confirmed answer for
+        Moxfield decks (see models.deck_languages), the stored language for
+        Deck Maker decks. A card using copies in several languages gets
+        "languages" {code: copies} instead (the popup shows the breakdown)."""
+        cards = []
+        for card in self.deck.cards:
+            split = deck_languages.language_split(self.deck, card)
+            if len(split) == 1:
+                cards.append({**card, "language": next(iter(split))})
+            else:
+                cards.append({**card, "languages": split})
+        return cards
+
+    def _language_conflicts(self) -> list:
+        if not self.deck or not self.app:
+            return []
+        return deck_languages.conflicts(self.deck, self.app.collection.cards)
+
+    def _refresh_language_warning(self):
+        """Shows "⚠ N cards need a language check" while any card's
+        language is unconfirmed; once all are, a quiet "Card languages
+        confirmed" (still clickable, to change answers); hidden if the
+        deck has no such cards."""
+        conflicts = self._language_conflicts()
+        unconfirmed = sum(1 for c in conflicts if c["answer"] is None)
+        if not conflicts:
+            self._language_btn.hide()
+            return
+        if unconfirmed:
+            self._language_btn.setText(
+                f"⚠  {plural(unconfirmed, 'card')} need{'s' if unconfirmed == 1 else ''} a language check"
+            )
+            self._language_btn.setProperty("confirmed", False)
+        else:
+            self._language_btn.setText("✓  Card languages confirmed")
+            self._language_btn.setProperty("confirmed", True)
+        self._language_btn.style().unpolish(self._language_btn)  # re-apply [confirmed] style
+        self._language_btn.style().polish(self._language_btn)
+        self._language_btn.show()
+
+    def _open_language_check(self):
+        """Warning click: asks which language of copy the deck uses for
+        each conflicting card, and stores the answers."""
+        conflicts = self._language_conflicts()
+        if not conflicts:
+            return
+        dialog = LanguageCheckDialog(self, self.deck.name, conflicts)
+        if dialog.exec() != LanguageCheckDialog.Accepted:
+            return
+        deck_languages.save_answers(self.deck.deck_id, dialog.answers())
+        self._refresh_language_warning()
+        self._display_cards = self._cards_with_languages()
+        self._rebuild_sections()  # tiles/popups/search use the new languages
+        self.languages_changed.emit()
+
 
     def _refresh_active_button(self):
         """Syncs the active/archived toggle and label to self.deck's
@@ -127,14 +300,33 @@ class DeckDetailScreen(QWidget):
         self.deck.set_active(is_active)
         self.active_label.setText("Active" if is_active else "Archived")
 
+    def _on_search_changed(self, predicate):
+        """Slot for SearchBox.search_changed: re-filters the deck's cards
+        (None shows them all)."""
+        self._search_predicate = predicate
+        if self.deck:
+            self._rebuild_sections()
+
     def _rebuild_sections(self):
-        """Rebuilds the type-grouped card grid for the current deck. Its
-        commanders form their own bucket; the rest are grouped by type."""
+        """Rebuilds the type-grouped card grid for the current deck —
+        only cards matching the search, if there is one. Its commanders
+        form their own bucket; the rest are grouped by type."""
+        cards = self._display_cards
+        if self._search_predicate is not None:
+            cards = [c for c in cards if self._search_predicate(c)]
+            total = sum(c["quantity"] for c in cards)
+            self._search.set_result_text(plural(total, "card"))
         commander_names = {c["name"] for c in self.deck.commanders}
         rebuild_card_sections(
             self._sections_layout,
-            self.deck.cards,
+            cards,
             commander_names,
             caption_fn=quantity_caption,
             on_click=self.card_clicked.emit,
         )
+        # Tokens the deck makes (Moxfield decks), below the cards — hidden
+        # while searching, since the search is over the deck's cards
+        tokens = [token_printings.apply(t) for t in self.deck.tokens]  # your default printings
+        if tokens and self._search_predicate is None:
+            self._sections_layout.addWidget(build_card_section(
+                "Tokens", len(tokens), tokens, lambda t: t["name"], self.card_clicked.emit))

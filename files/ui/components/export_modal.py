@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 import availability
+from card_fields import plural
 from ui.components.overlay_modal import OverlayModal
 
 
@@ -123,7 +124,7 @@ class ExportModal(OverlayModal):
             lines.append(f"{quantity} {r['name']} ({set_code.upper()})")
 
         self._text.setPlainText("\n".join(lines))
-        self._count_label.setText(f"{len(lines)} line{'s' if len(lines) != 1 else ''}")
+        self._count_label.setText(plural(len(lines), "line"))
         self._copy_btn.setEnabled(bool(lines))
 
     def _copy(self):

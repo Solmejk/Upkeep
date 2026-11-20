@@ -27,7 +27,7 @@ class _ImageLoadTask(QRunnable):
     """
 
     def __init__(self, token, url: str, cache_name: str,
-                 width: int, height: int, radius: int):
+                 width: int, height: int, radius: int, fill: bool = False):
         """token: opaque value the caller uses to identify which tile
         this result belongs to (passed back unchanged in ready/failed).
         url: image URL to fetch. cache_name: on-disk cache key (see
@@ -40,6 +40,7 @@ class _ImageLoadTask(QRunnable):
         self.width = width
         self.height = height
         self.radius = radius
+        self.fill = fill  # exactly width x height (scaled to cover, centre cropped) vs fit inside
         self.signals = _TaskSignals()
         # QThreadPool auto-deletes QRunnables the instant run() returns — from
         # the worker thread, before the queued ready/failed signal has been
@@ -67,12 +68,20 @@ class _ImageLoadTask(QRunnable):
                 self.signals.failed.emit(self.token)
                 return
 
-            # 3. Scale
-            scaled = image.scaled(
-                self.width, self.height,
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation,
-            )
+            # 3. Scale — to fit inside width x height, or (fill) to exactly
+            # that size: cover it and trim the overflow from the centre, so a
+            # border drawn around it lines up (see ImageTile)
+            if self.fill:
+                scaled = image.scaled(self.width, self.height, Qt.KeepAspectRatioByExpanding,
+                                      Qt.SmoothTransformation)
+                scaled = scaled.copy((scaled.width() - self.width) // 2,
+                                     (scaled.height() - self.height) // 2, self.width, self.height)
+            else:
+                scaled = image.scaled(
+                    self.width, self.height,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
 
             # 4. Round corners — paint into a transparent target
             result = QImage(scaled.size(), QImage.Format_ARGB32_Premultiplied)
@@ -139,12 +148,13 @@ class ImageLoader:
         for task in pending:
             self._pool.start(task)
 
-    def submit(self, token, url, cache_name, width, height, radius, on_ready, on_failed=None):
+    def submit(self, token, url, cache_name, width, height, radius, on_ready, on_failed=None,
+               fill: bool = False):
         """Queues an image fetch/decode. token/url/cache_name/width/
         height/radius: see _ImageLoadTask. on_ready(token, QImage): called
         on the main thread when the image is ready. on_failed(token):
         called on the main thread if the fetch/decode fails; optional."""
-        task = _ImageLoadTask(token, url, cache_name, width, height, radius)
+        task = _ImageLoadTask(token, url, cache_name, width, height, radius, fill)
         self._inflight.append(task)
 
         task.signals.ready.connect(on_ready)

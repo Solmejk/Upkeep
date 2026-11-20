@@ -79,9 +79,12 @@ class ColorPie(QWidget):
 class ColorLegend(QWidget):
     """Text legend matching the pie chart."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, show_percent: bool = False):
+        """show_percent: also show each color's share of the pie, e.g.
+        "White: 26 (29%)"."""
         super().__init__(parent)
         self._counts = {}
+        self._show_percent = show_percent
 
     def setCounts(self, counts: dict):
         """Replaces the legend's data and repaints. counts: same shape as
@@ -99,6 +102,7 @@ class ColorLegend(QWidget):
         font.setPointSize(10)
         painter.setFont(font)
 
+        total = sum(self._counts.values())
         y = 4
         for key, count in self._counts.items():
             color_hex, label = COLOR_SWATCHES.get(key, ("#888888", key))
@@ -110,7 +114,10 @@ class ColorLegend(QWidget):
 
             # Text
             painter.setPen(QColor("#e8e8e8"))
-            painter.drawText(18, y + 12, f"{label}: {count}")
+            text = f"{label}: {count}"
+            if self._show_percent and total:
+                text += f" ({round(100 * count / total)}%)"
+            painter.drawText(18, y + 12, text)
             y += 20
 
         painter.end()

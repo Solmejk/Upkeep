@@ -3,6 +3,9 @@ active decks: how many of each card are owned, how many are already tied
 up elsewhere, and how many are actually free to use."""
 
 import scryfall
+from languages import entry_language
+from models import deck_languages
+from models.deck_draft import deck_card_printing_key, printing_key
 
 FREE = "free"
 USED = "used"
@@ -39,6 +42,18 @@ def count_in_other_decks(decks, card_name: str) -> int:
     return total
 
 
+def unique_check(collection_entries: list):
+    """For is:unique: entry -> True if the collection holds exactly one
+    copy of that card in total (all printings, finishes and languages —
+    one copy in each of two printings isn't unique). Works for collection
+    entries and deck cards alike."""
+    owned = {}
+    for entry in collection_entries:
+        name = entry["card"]["name"]
+        owned[name] = owned.get(name, 0) + entry["quantity"]
+    return lambda entry: owned.get((entry.get("card") or entry)["name"], 0) == 1
+
+
 def owned_printings(collection, card_name: str) -> list[dict]:
     """Which specific printings are owned, and how many of each."""
     target = card_name.lower()
@@ -47,6 +62,7 @@ def owned_printings(collection, card_name: str) -> list[dict]:
             "set": entry["card"].get("set", ""),
             "cn": entry["card"].get("cn", ""),
             "quantity": entry["quantity"],
+            "language": entry_language(entry),
         }
         for entry in collection.cards
         if entry["card"]["name"].lower() == target
@@ -61,6 +77,27 @@ def used_in_decks(decks, card_name: str) -> list[dict]:
         if not deck.active:
             continue
         quantity = sum(c["quantity"] for c in deck.cards if c["name"].lower() == target)
+        if quantity > 0:
+            used.append({"deck_name": deck.name, "quantity": quantity})
+    return used
+
+
+def used_in_decks_by_printing(decks, card: dict, exclude_deck_id: str | None = None) -> list[dict]:
+    """Like used_in_decks, but only counting decks that use this exact
+    printing + finish + language (set, collector number, foil/etched,
+    language) — for a specific owned copy, e.g. a card clicked in the
+    collection. card: a flat dict with set/cn/isFoil/finish/language. exclude_deck_id: a deck to leave
+    out (the Deck Maker's own saved deck, which isn't "elsewhere")."""
+    key = printing_key(card.get("set", ""), card.get("cn", ""), card.get("isFoil"), card.get("finish"),
+                       card.get("language"))
+    used = []
+    for deck in decks:
+        if not deck.active or deck.deck_id == exclude_deck_id:
+            continue
+        quantity = sum(
+            deck_languages.language_split(deck, c).get(key[3], 0)
+            for c in deck.cards if deck_card_printing_key(c)[:3] == key[:3]
+        )
         if quantity > 0:
             used.append({"deck_name": deck.name, "quantity": quantity})
     return used

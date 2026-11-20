@@ -1,19 +1,30 @@
 """DecksScreen: a wrapping grid of deck tiles (commander art + name),
-with active/archived and commander-format toggles. Clicking a tile opens
-DeckDetailScreen (wired up in MainWindow).
+with active/archived and commander-format toggles, and a search by deck
+name. Clicking a tile opens DeckDetailScreen (wired up in MainWindow).
 """
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QPushButton, QMenu, QLineEdit,
 )
 
 from app import MTGApp
 from ui.flow_layout import FlowLayout
 from ui.layout_utils import clear_layout
 from ui.components.image_tile import ImageTile
+import scryfall
+from card_sort import name_key
+from models.deck import SOURCE_MOXFIELD
+from card_fields import plural
 from ui.components.toggle_switch import ToggleSwitch
 
+
+# Caption badge per deck source: (letter, color) shown before the deck
+# name. Decks built in the Deck Maker (SOURCE_LOCAL) get none; a new import
+# site gets its own entry here.
+SOURCE_BADGES = {
+    SOURCE_MOXFIELD: ("M", "#9b59b6"),  # purple, like the foil tint's
+}
 
 TILE_WIDTH = 220
 TILE_HEIGHT = 310
@@ -23,6 +34,9 @@ class DecksScreen(QWidget):
     """Grid of clickable deck tiles, with active/format filters."""
 
     deck_selected = Signal(object)  # emitted with a models.deck.Deck on click
+    delete_requested = Signal(object)  # emitted with a Deck via a tile's right-click menu (local decks only)
+    refresh_requested = Signal()    # emitted when "Refresh decks" is clicked
+    deck_imported = Signal(str)     # a decklist was imported as a local deck (its id)
 
     def __init__(self, app: MTGApp):
         """Builds the screen and its (initially both-on) filters, then
@@ -31,6 +45,7 @@ class DecksScreen(QWidget):
         self.app = app
         self._active_only = True
         self._commander_only = True
+        self._name_filter = ""  # deck name search (name_key form), "" = all
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -65,7 +80,35 @@ class DecksScreen(QWidget):
         self._commander_toggle.toggled.connect(self._on_commander_toggled)
         top_layout.addWidget(self._commander_toggle)
 
+        self._import_btn = QPushButton("Import deck")
+        self._import_btn.setToolTip("Paste a decklist (Moxfield format) to add it as a Deck Maker deck")
+        self._import_btn.setEnabled(app.is_logged_in)  # local decks are saved per user
+        self._import_btn.clicked.connect(self._on_import_clicked)
+        top_layout.addWidget(self._import_btn)
+
+        self._refresh_btn = QPushButton("Refresh decks")
+        self._refresh_btn.setEnabled(app.is_logged_in)
+        self._refresh_btn.clicked.connect(self.refresh_requested.emit)
+        top_layout.addWidget(self._refresh_btn)
+
         outer.addWidget(top_bar)
+
+        # Search by deck name (plain text — not the card search syntax)
+        search_row = QWidget()
+        search_layout = QHBoxLayout(search_row)
+        search_layout.setContentsMargins(40, 0, 40, 16)
+        search_layout.setSpacing(0)
+        search_layout.addStretch()
+        self._result_count = QLabel()
+        self._result_count.setObjectName("resultCount")
+        search_layout.addWidget(self._result_count)
+        self._search = QLineEdit()
+        self._search.setObjectName("searchInput")
+        self._search.setPlaceholderText("Search decks by name…")
+        self._search.setFixedWidth(340)
+        self._search.textChanged.connect(self._on_search_changed)
+        search_layout.addWidget(self._search)
+        outer.addWidget(search_row)
 
         # Scrollable grid
         scroll = QScrollArea()
@@ -82,6 +125,19 @@ class DecksScreen(QWidget):
 
         self._rebuild_grid()
 
+    def set_refresh_enabled(self, enabled: bool):
+        """Toggles the refresh button between its normal and
+        "Refreshing…" (disabled) states — called by MainWindow around
+        the background Moxfield fetch."""
+        self._refresh_btn.setEnabled(enabled)
+        self._refresh_btn.setText("Refresh decks" if enabled else "Refreshing…")
+
+    def _on_search_changed(self, text: str):
+        """Slot for the name search box: re-filters the grid to decks whose
+        name contains `text` (case- and accent-insensitive)."""
+        self._name_filter = name_key(text.strip())
+        self._rebuild_grid()
+
     def _on_active_toggled(self, value: bool):
         """Slot for the "Active only" toggle: updates the filter and
         rebuilds the grid. value: the toggle's new checked state."""
@@ -95,9 +151,11 @@ class DecksScreen(QWidget):
         self._rebuild_grid()
 
     def _filtered_decks(self):
-        """Yields decks from self.app.decks matching the current
-        active/commander-only filters."""
+        """Yields decks from self.app.decks matching the current name
+        search and active/commander-only filters."""
         for deck in self.app.decks:
+            if self._name_filter and self._name_filter not in name_key(deck.name):
+                continue
             if self._active_only and not deck.active:
                 continue
             if self._commander_only and deck.format != "commander":
@@ -113,20 +171,46 @@ class DecksScreen(QWidget):
         clear_layout(self._flow)
 
         # Add tiles for filtered decks
+        shown = 0
         for deck in self._filtered_decks():
+            shown += 1
             commander_url = self._commander_url(deck)
             tile = ImageTile(
                 image_url=commander_url,
-                cache_name=f"commander_{deck.deck_id}",
+                # the commander card's own cache name — shared with the card's
+                # other images, and artist proofs apply (models.artist_proofs)
+                cache_name=scryfall.card_image_cache_name(deck.commanders[0]) if deck.commanders else f"commander_{deck.deck_id}",
                 caption=deck.name,
+                caption_badge=SOURCE_BADGES.get(deck.source),
                 payload=deck,
                 width=TILE_WIDTH,
                 height=TILE_HEIGHT,
                 radius=12,
             )
             tile.clicked.connect(self.deck_selected.emit)
+            if not deck.is_imported:  # only Deck Maker decks can be deleted
+                tile.setContextMenuPolicy(Qt.CustomContextMenu)
+                tile.customContextMenuRequested.connect(
+                    lambda pos, t=tile: self._show_tile_menu(t, pos)
+                )
             tile.load_image()
             self._flow.addWidget(tile)
+
+        self._result_count.setText(plural(shown, "deck") if self._name_filter else "")
+
+    def _on_import_clicked(self):
+        """Import deck: the paste dialog; announces the new deck once saved."""
+        from ui.components.deck_import_dialog import DeckImportDialog
+        dialog = DeckImportDialog(self, self.app.username)
+        if dialog.exec() and dialog.deck_id:
+            self.deck_imported.emit(dialog.deck_id)
+
+    def _show_tile_menu(self, tile, pos):
+        """Right-click on a Deck Maker deck's tile: a "Delete deck" menu."""
+        menu = QMenu(self)
+        delete_action = menu.addAction("Delete deck")
+        delete_action.triggered.connect(lambda: self.delete_requested.emit(tile.payload))
+        menu.exec(tile.mapToGlobal(pos))
 
     def _commander_url(self, deck) -> str:
         """The deck's commander art URL for its tile, or "" if the deck
