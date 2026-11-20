@@ -20,7 +20,7 @@ SAVED_AVAILABILITY_DECKS_PATH = CACHE_DIR / "saved_availability_decks.json"
 SYNC_LOG_PATH = CACHE_DIR / "sync_log.txt"
 COLLECTION_PRICES_PATH = CACHE_DIR / "collection_prices.json"  # Scryfall prices, see scryfall_prices.py
 
-# User-created data — NOT cache: clearCache never touches this folder.
+# User-created data — NOT cache: clear_cache never touches this folder.
 DATA_DIR = FILES_ROOT / "data"
 LOCAL_DECKS_DIR = DATA_DIR / "decks"  # decks built in the Deck Maker
 DECK_LANGUAGES_PATH = DATA_DIR / "deck_languages.json"  # confirmed card languages per Moxfield deck

@@ -3,7 +3,7 @@ the Collection screen, showing the collection's mana-color breakdown.
 """
 
 from PySide6.QtCore import Qt, QRectF
-from PySide6.QtGui import QPainter, QColor, QFont, QPen
+from PySide6.QtGui import QPainter, QColor, QFont
 from PySide6.QtWidgets import QWidget
 
 

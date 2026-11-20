@@ -17,7 +17,6 @@ class Collection:
         MTGApp.collection). Starts empty — call load() to populate."""
         self._collection_id = collection_id
         self._cards = []
-        self._value = 0
         self._total_cards = 0
 
     @property
@@ -25,10 +24,6 @@ class Collection:
         """Raw Moxfield collection entries: each has at least "quantity"
         and "card" (with name/set/cn/prices/etc.)."""
         return self._cards
-
-    @property
-    def valued(self):
-        return self._value
 
     @property
     def total_cards(self):

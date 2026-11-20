@@ -4,7 +4,7 @@ DeckDetail's active/archived toggle).
 """
 
 from PySide6.QtCore import Qt, Signal, QRectF, QPropertyAnimation, Property
-from PySide6.QtGui import QPainter, QColor, QBrush, QPen
+from PySide6.QtGui import QPainter, QColor, QBrush
 from PySide6.QtWidgets import QWidget
 
 

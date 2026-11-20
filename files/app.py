@@ -67,14 +67,3 @@ class MTGApp:
     def decks(self):
         """The current user's decks, or an empty list if logged out."""
         return self._user.decks if self._user else []
-
-    def get_deck(self, name: str):
-        """Looks up one of the current user's decks by name
-        (case-insensitive). Returns None if logged out or no deck
-        matches. name: the deck's display name to search for."""
-        if not self._user:
-            return None
-        for deck in self._user.decks:
-            if deck.name.lower() == name.lower():
-                return deck
-        return None

@@ -3,12 +3,10 @@
 via add_item().
 """
 
-from pathlib import Path
-
 from PySide6.QtCore import Qt, Signal, QRect
-from PySide6.QtGui import QPixmap, QPainter, QPainterPath, QRegion
+from PySide6.QtGui import QPixmap, QPainter, QPainterPath
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QListWidget, QListWidgetItem,
+    QWidget, QVBoxLayout, QListWidget, QListWidgetItem,
 )
 
 from image_cache import get_image_path

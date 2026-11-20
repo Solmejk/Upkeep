@@ -320,7 +320,7 @@ class PurchasesScreen(QWidget):
         """Right-click on a card: remove one copy / all copies."""
         name = tile["card"]["name"]
         menu = QMenu(self)
-        remove_one = menu.addAction(f"Remove 1 {name} (not received)")
+        menu.addAction(f"Remove 1 {name} (not received)")  # any pick but "all" removes one
         remove_all = None
         if tile["quantity"] > 1:
             remove_all = menu.addAction(f"Remove all {tile['quantity']} copies")

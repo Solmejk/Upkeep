@@ -3,7 +3,7 @@ Settings screen's Sync log page. One line per sync step, newest last:
 
     2026-11-17 23:41:05 | Collection | Collection page | Solmejk | OK     |   3.4s | 4434 cards (3352 unique)
 
-Not touched by clearCache (it only removes the data caches).
+Not touched by clear_cache (it only removes the data caches).
 """
 
 import time

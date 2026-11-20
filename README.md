@@ -11,8 +11,8 @@ Built with Python and Qt (PySide6). Runs on Windows. It should also run on macOS
 **Requirements:** Python 3.10 or newer (developed on 3.13).
 
 ```bash
-pip install PySide6 requests python-docx pillow pdfplumber
-python files/ui.py
+pip install -r requirements.txt
+python files/main.py
 ```
 
 | Package | Used for |
@@ -131,7 +131,7 @@ Everything is stored next to the code, in `files/`:
 
 ```
 files/
-├── ui.py                  entry point
+├── main.py                entry point
 ├── app.py, session.py     app state and the logged-in user
 ├── paths.py               all file locations
 ├── moxfield.py, scryfall.py, scryfall_prices.py      online services

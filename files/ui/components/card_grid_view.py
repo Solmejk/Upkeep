@@ -79,9 +79,7 @@ class CollectionModel(QAbstractListModel):
 
 class CardThumbnailDelegate(QStyledItemDelegate):
     """Paints a card cell: rounded image + caption. Loads images via ImageLoader."""
-    
-    repaint_requested = Signal(int)  # row index — fires when an image arrives
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._view = None

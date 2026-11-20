@@ -1,11 +1,7 @@
 """ImageLoader: the app-wide singleton for fetching/decoding/rounding
 card and profile images off the main thread. ImageTile and
-CardThumbnailDelegate both submit() to it; it never blocks the UI, and
-can be paused (e.g. while the user is typing a search) to avoid
-saturating the thread pool with images that are about to scroll away.
+CardThumbnailDelegate both submit() to it; it never blocks the UI.
 """
-
-from pathlib import Path
 from PySide6.QtCore import (
     Qt, QObject, QRunnable, QThreadPool, Signal, Slot, QRectF,
 )
@@ -115,8 +111,6 @@ class ImageLoader:
         """Not called directly — use ImageLoader.instance()."""
         self._pool = QThreadPool.globalInstance()
         self._pool.setMaxThreadCount(6)
-        self._paused = False
-        self._pending = []  # tasks held back while paused
         # Tasks have autoDelete disabled (see _ImageLoadTask) to avoid a
         # use-after-free race against their own queued signal delivery. We
         # never discard them, since attempting to release them right after
@@ -133,21 +127,6 @@ class ImageLoader:
             cls._instance = cls()
         return cls._instance
 
-    def pause(self):
-        """Stops starting new submit()ted tasks (they queue in
-        self._pending) until resume() is called. Doesn't affect tasks
-        already running."""
-        self._paused = True
-
-    def resume(self):
-        """Re-enables starting new tasks and immediately starts everything
-        that was queued while paused."""
-        self._paused = False
-        # Flush whatever was held back
-        pending, self._pending = self._pending, []
-        for task in pending:
-            self._pool.start(task)
-
     def submit(self, token, url, cache_name, width, height, radius, on_ready, on_failed=None,
                fill: bool = False):
         """Queues an image fetch/decode. token/url/cache_name/width/
@@ -161,7 +140,4 @@ class ImageLoader:
         if on_failed:
             task.signals.failed.connect(on_failed)
 
-        if self._paused:
-            self._pending.append(task)
-        else:
-            self._pool.start(task)
+        self._pool.start(task)

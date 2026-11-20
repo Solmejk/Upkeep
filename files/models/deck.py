@@ -17,10 +17,6 @@ from models.deck_state import is_active, set_active
 # existed are Moxfield decks.
 SOURCE_MOXFIELD = "moxfield"
 SOURCE_LOCAL = "local"  # built in the Deck Maker
-SOURCE_LABELS = {  # source -> display name
-    SOURCE_MOXFIELD: "Moxfield",
-    SOURCE_LOCAL: "Deck Maker",
-}
 
 # Bumped whenever _trim_raw_deck's output gains data older cached decks
 # lack; a cached deck with an older version is flagged `outdated` so the
@@ -41,7 +37,6 @@ class Deck:
         self._cards = []
         self._total_cards = 0
         self._commanders = []
-        self._author = ""
         self._value = 0
         self._active = is_active(self._deck_id)
         self._format = ""
@@ -107,10 +102,6 @@ class Deck:
         return self._commanders
 
     @property
-    def author(self):
-        return self._author
-
-    @property
     def active(self):
         """Whether this deck counts as "in use" for availability
         checks — archived decks don't tie up their cards. Persisted via
@@ -152,7 +143,6 @@ class Deck:
         self._cards = data["cards"]
         self._tokens = data.get("tokens", [])  # Moxfield decks (cache v4+) only
         self._total_cards = data["total_cards"]
-        self._author = data["author"]
         self._value = data["value"]
         self._source = data.get("source", SOURCE_MOXFIELD)
         # only website imports can be re-fetched in the current format

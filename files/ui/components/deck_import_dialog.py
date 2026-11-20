@@ -8,7 +8,7 @@ Scryfall in the background (deck_import.resolve) and saves the deck
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton,
     QComboBox, QFileDialog, QMessageBox,

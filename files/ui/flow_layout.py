@@ -4,7 +4,7 @@ based on the container's width (Decks, DeckDetail, Availability grids).
 """
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt
-from PySide6.QtWidgets import QLayout, QSizePolicy
+from PySide6.QtWidgets import QLayout
 
 
 class FlowLayout(QLayout):

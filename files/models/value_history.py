@@ -8,7 +8,7 @@ prices.lastUpdatedAtUtc), not by when you refreshed: refreshing before
 Moxfield has new prices just overwrites that day's point instead of
 adding a flat duplicate, so the line only moves on real price changes.
 
-One file per user under data/ (user data, not cache: clearCache never
+One file per user under data/ (user data, not cache: clear_cache never
 touches it — clearing the collection cache mustn't erase the history).
 """
 

@@ -1,6 +1,6 @@
 """Default printings for tokens: which printing (art) to show for a token
 wherever a deck makes it, chosen in the token's popup (Set default
-printing...). Saved in data/token_printings.json (user data — clearCache
+printing...). Saved in data/token_printings.json (user data — clear_cache
 never touches it), keyed by Moxfield's id for the token itself
 ("uid" on a deck token — the same for every printing of it):
     {uid: {"scryfall_id", "set", "cn", "set_name"}}

@@ -1,5 +1,5 @@
 """Imported purchases (Cardmarket orders — see cardmarket.py), one JSON
-file each under data/purchases/. User data, not cache: clearCache never
+file each under data/purchases/. User data, not cache: clear_cache never
 touches it.
 
 A purchase is a dict: "id", "name", "seller", "date", "total", ... plus

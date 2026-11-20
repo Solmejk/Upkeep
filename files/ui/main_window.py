@@ -29,7 +29,7 @@ from ui.components.deck_export_modal import DeckExportModal
 from ui.components.player_modal import PlayerModal
 from ui.components.tracker_deck_modal import TrackerDeckModal
 from ui.background import run_in_background
-import clearCache
+import clear_cache
 import scryfall
 import session
 import sync
@@ -40,7 +40,7 @@ class MainWindow(QMainWindow):
     def __init__(self, app: MTGApp):
         """Builds every screen, wires up navigation and cross-screen
         signals, and kicks off the background deck-content load. app:
-        the MTGApp facade, already loaded (or logged-out) by ui.py."""
+        the MTGApp facade, already loaded (or logged-out) by main.py."""
         super().__init__()
         self.app = app
         self.setWindowTitle("MTG Collection Manager")
@@ -353,13 +353,13 @@ class MainWindow(QMainWindow):
         comment below for why that's necessary."""
         for target in targets:
             if target == "collection":
-                clearCache.clear_collection()
+                clear_cache.clear_collection()
             elif target == "decks":
-                clearCache.clear_decks()
+                clear_cache.clear_decks()
             elif target == "profile":
-                clearCache.clear_profile()
+                clear_cache.clear_profile()
             elif target == "images":
-                clearCache.clear_images()
+                clear_cache.clear_images()
 
         if "profile" in targets:
             # The username itself lives in session.py, independent of the

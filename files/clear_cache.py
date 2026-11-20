@@ -1,6 +1,6 @@
 """Clears cached data by category (collection/decks/profile/images).
 Used both by the Settings screen's "Clear cache" checkboxes and as a
-standalone CLI: `python clearCache.py [collection|decks|profile|images|all]`.
+standalone CLI: `python clear_cache.py [collection|decks|profile|images|all]`.
 """
 
 import os
@@ -66,7 +66,7 @@ def clear_all():
 if __name__ == "__main__":
     import sys
     if len(sys.argv) < 2:
-        print("Usage: python clearCache.py [collection|decks|profile|images|all]")
+        print("Usage: python clear_cache.py [collection|decks|profile|images|all]")
         sys.exit(1)
 
     target = sys.argv[1].lower()

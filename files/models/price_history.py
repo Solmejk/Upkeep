@@ -3,7 +3,7 @@
 refresh). Feeds the price chart in the card popup and the Collection
 screen's biggest riser / faller.
 
-Stored compactly in data/price_history.json (user data — clearCache
+Stored compactly in data/price_history.json (user data — clear_cache
 never touches it):
     {"ids":  [scryfall_id, ...],                 # append-only index
      "days": {"YYYY-MM-DD": [[eur, eur_foil], ...]}}  # row i = ids[i]

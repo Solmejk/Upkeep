@@ -17,7 +17,7 @@
                winner: a draw or an unfinished game) and notes.
 
 GameTracker loads / saves everything as data/game_tracker.json (user data
-— clearCache never touches it) and does every change through methods
+— clear_cache never touches it) and does every change through methods
 that keep it consistent (unique players, valid winners, merges).
 
 Elo (player and deck, separately): everyone starts at 1500. In a game

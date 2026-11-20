@@ -76,30 +76,6 @@ def update(name: str, set_code: str, cn: str, front=KEEP, back=KEEP, flags: dict
     _save(index)
 
 
-def set_proof(name: str, set_code: str, cn: str, front: str | None = None, back: str | None = None):
-    """update() with files only (None keeps that side)."""
-    update(name, set_code, cn, front=front, back=back)
-
-
-def remove_back(set_code: str, cn: str):
-    index = load()
-    entry = index.get(key(set_code, cn))
-    if entry and entry["back"]:
-        (paths.ARTIST_PROOFS_DIR / entry["back"]).unlink(missing_ok=True)
-        entry["back"] = None
-        _save(index)
-
-
-def remove_proof(set_code: str, cn: str):
-    index = load()
-    entry = index.pop(key(set_code, cn), None)
-    if entry:
-        for side in ("front", "back"):
-            if entry[side]:
-                (paths.ARTIST_PROOFS_DIR / entry[side]).unlink(missing_ok=True)
-        _save(index)
-
-
 def image_path(entry: dict, side: str) -> Path | None:
     return paths.ARTIST_PROOFS_DIR / entry[side] if entry.get(side) else None
 
