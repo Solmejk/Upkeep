@@ -4,7 +4,6 @@ fetched fresh — see load() for the two modes.
 
 from concurrent.futures import ThreadPoolExecutor
 
-import requests
 import cache_io
 import moxfield
 import paths
@@ -60,18 +59,8 @@ class Collection:
         Moxfield rejects pageSize 0 and caps pages at 100 entries, so the
         full collection takes one request per page — pages after the
         first (which reports totalPages) are fetched a few at a time."""
-        url = moxfield.collection_search_api_url(self._collection_id)
-
         def fetch_page(page):
-            params = {
-                "pageNumber": page,
-                "pageSize": 100,
-                "sortType": "cardName",
-                "sortDirection": "ascending",
-            }
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            return response.json()
+            return moxfield.fetch_collection_page(self._collection_id, page)
 
         data = fetch_page(1)
         if data == {}:

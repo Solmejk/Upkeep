@@ -67,3 +67,9 @@ class MTGApp:
     def decks(self):
         """The current user's decks, or an empty list if logged out."""
         return self._user.decks if self._user else []
+
+    def is_me(self, player) -> bool:
+        """True if a Game Tracker player (models.game_tracker.Player) is
+        the logged-in user — their Moxfield account."""
+        return (self.is_logged_in and player.kind == "moxfield"
+                and player.username.lower() == self.username.lower())

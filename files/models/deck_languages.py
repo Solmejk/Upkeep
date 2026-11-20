@@ -12,7 +12,7 @@ import cache_io
 import paths
 from languages import DEFAULT_LANGUAGE, deck_card_language, entry_language
 from models.deck import SOURCE_MOXFIELD
-from models.deck_draft import deck_card_printing_key, entry_printing_key
+from printing import deck_card_printing_key, entry_printing_key
 
 
 def _load() -> dict:

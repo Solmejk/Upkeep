@@ -1,7 +1,12 @@
 """Everything to do with talking to Moxfield: parsing deck URLs a user
-pastes in, and building the API endpoint URLs used to fetch data."""
+pastes in, the API endpoint URLs, and every request to its API —
+profiles, decks, collections and deck searches (the deck list for your
+account and for Game Tracker players). Models call these; nothing else
+talks to Moxfield directly."""
 
 import re
+
+import requests
 
 API_BASE = "https://api2.moxfield.com"
 
@@ -42,3 +47,51 @@ def collection_search_api_url(collection_id: str) -> str:
 def deck_api_url(deck_id: str) -> str:
     """Endpoint for fetching one deck's full contents."""
     return f"{API_BASE}/v3/decks/all/{deck_id}"
+
+
+def search_decks(username: str, timeout: int = 15) -> dict:
+    """A Moxfield user's public decks, newest first — every page (Moxfield
+    serves at most 100 per request). Returns the first page's response
+    with "data" holding all pages' decks (each with name, publicId,
+    format, colorIdentity, ...). Raises on network errors / unknown users."""
+    params = {
+        "includePinned": "false",
+        "showIllegal": "true",
+        "authorUserNames": username,
+        "sortType": "updated",
+        "sortDirection": "descending",
+        "board": "mainboard",
+        "pageNumber": 1,
+        "pageSize": 100,  # Moxfield's max; defaults to 25
+    }
+    response = requests.get(decks_search_api_url(), params=params, timeout=timeout)
+    response.raise_for_status()
+    result = response.json()
+    for page in range(2, result.get("totalPages", 1) + 1):
+        params["pageNumber"] = page
+        response = requests.get(decks_search_api_url(), params=params, timeout=timeout)
+        response.raise_for_status()
+        result["data"].extend(response.json()["data"])
+    return result
+
+
+def fetch_profile(username: str, timeout: int = 10) -> dict:
+    """A user's profile (avatar, collection id, ...). Raises on errors."""
+    return _get_json(user_api_url(username), timeout=timeout)
+
+
+def fetch_deck(deck_id: str, timeout: int = 10) -> dict:
+    """One deck's full contents (boards, tokens, ...). Raises on errors."""
+    return _get_json(deck_api_url(deck_id), timeout=timeout)
+
+
+def fetch_collection_page(collection_id: str, page: int, timeout: int = 10) -> dict:
+    """One page (100 entries, by card name) of a collection. Raises on errors."""
+    params = {"pageNumber": page, "pageSize": 100, "sortType": "cardName", "sortDirection": "ascending"}
+    return _get_json(collection_search_api_url(collection_id), params, timeout)
+
+
+def _get_json(url: str, params: dict | None = None, timeout: int = 10) -> dict:
+    response = requests.get(url, params=params, timeout=timeout)
+    response.raise_for_status()
+    return response.json()

@@ -9,6 +9,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtCore import QPointF
 from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap, QPen, QPainterPath
+from ui import theme
 
 
 def tinted_pixmap(path: Path, color: QColor | str, size: int = 16) -> QPixmap:
@@ -34,7 +35,7 @@ def tinted_icon(path: Path, color: QColor | str, size: int = 16) -> QIcon:
     return QIcon(tinted_pixmap(path, color, size))
 
 
-def check_icon(color: QColor | str = "#4caf50", size: int = 18) -> QIcon:
+def check_icon(color: QColor | str = theme.WIN, size: int = 18) -> QIcon:
     """A drawn checkmark (no asset needed) — e.g. a received purchase.
     color=None gives an empty icon of the same size, so rows with and
     without a check stay aligned."""

@@ -5,6 +5,7 @@ the Collection screen, showing the collection's mana-color breakdown.
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QPainter, QColor, QFont
 from PySide6.QtWidgets import QWidget
+from ui import theme
 
 
 # Color mapping for MTG mana colors → display swatches
@@ -57,7 +58,7 @@ class ColorPie(QWidget):
         for key, count in self._counts.items():
             if count == 0:
                 continue
-            color_hex, _ = COLOR_SWATCHES.get(key, ("#888888", key))
+            color_hex, _ = COLOR_SWATCHES.get(key, (theme.MUTED, key))
             span = -int(360 * 16 * (count / total))  # negative = clockwise
 
             painter.setPen(Qt.NoPen)
@@ -69,7 +70,7 @@ class ColorPie(QWidget):
         hole_size = side * 0.55
         hole_x = ring_x + (side - hole_size) / 2
         hole_y = ring_y + (side - hole_size) / 2
-        painter.setBrush(QColor("#1a1a1a"))  # page background
+        painter.setBrush(QColor(theme.PAGE_BG))  # page background
         painter.setPen(Qt.NoPen)
         painter.drawEllipse(QRectF(hole_x, hole_y, hole_size, hole_size))
 
@@ -105,7 +106,7 @@ class ColorLegend(QWidget):
         total = sum(self._counts.values())
         y = 4
         for key, count in self._counts.items():
-            color_hex, label = COLOR_SWATCHES.get(key, ("#888888", key))
+            color_hex, label = COLOR_SWATCHES.get(key, (theme.MUTED, key))
 
             # Swatch
             painter.setPen(Qt.NoPen)
@@ -113,7 +114,7 @@ class ColorLegend(QWidget):
             painter.drawEllipse(QRectF(0, y + 2, 10, 10))
 
             # Text
-            painter.setPen(QColor("#e8e8e8"))
+            painter.setPen(QColor(theme.TEXT))
             text = f"{label}: {count}"
             if self._show_percent and total:
                 text += f" ({round(100 * count / total)}%)"

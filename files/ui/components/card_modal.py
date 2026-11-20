@@ -19,6 +19,7 @@ from ui.components.value_chart import ValueChart
 from models import price_history, token_printings
 from paths import ASSETS_DIR
 from ui.icon_utils import tinted_icon
+from ui import theme
 
 
 CARD_IMG_WIDTH = 360
@@ -99,7 +100,7 @@ class CardModal(OverlayModal):
         # Flip: a small round button in the image's top-right corner
         self._flip_btn = QToolButton(self._image_label)
         self._flip_btn.setObjectName("flipCardButton")
-        self._flip_btn.setIcon(tinted_icon(ASSETS_DIR / "arrow.png", "#e8e8e8", size=18))
+        self._flip_btn.setIcon(tinted_icon(ASSETS_DIR / "arrow.png", theme.TEXT, size=18))
         self._flip_btn.setIconSize(QSize(18, 18))
         self._flip_btn.setFixedSize(FLIP_BUTTON_SIZE, FLIP_BUTTON_SIZE)
         self._flip_btn.setCursor(Qt.PointingHandCursor)

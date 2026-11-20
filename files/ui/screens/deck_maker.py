@@ -30,8 +30,10 @@ from card_sort import name_key
 import scryfall
 from app import MTGApp
 from models import deck_languages, local_decks
-from models.deck_draft import DeckDraft, DECK_SIZE, entry_printing_key, deck_card_printing_key
+from models.deck_draft import DeckDraft, DECK_SIZE
+from printing import entry_printing_key, deck_card_printing_key
 from models.local_decks import BASIC_LAND_IMAGE_URL
+from ui.components.section_card import back_button
 from ui.screens.availability import STATUS_COLORS
 import availability
 from ui.card_type import group_cards
@@ -45,6 +47,7 @@ from ui.components.card_grid_view import CardGridView
 from ui.components.image_tile import ImageTile
 from ui.components.search_box import ERROR_COLOR, SearchBox
 from ui.layout_utils import clear_layout
+from ui import theme
 
 # Commander-eligible and legal in the commander format.
 _IS_COMMANDER = card_search.compile_query("is:commander f:commander")
@@ -52,7 +55,7 @@ _IS_COMMANDER_LEGAL = card_search.compile_query("f:commander")
 _IS_LAND = card_search.compile_query("t:land")  # the "Exclude lands" checkbox = -t:land
 
 COLOR_NAMES = {code: name for code, (_, name) in COLOR_SWATCHES.items()}  # "W" -> "White", ...
-ACCENT = "#e8a838"
+ACCENT = theme.ACCENT
 OVER_COLOR = ERROR_COLOR  # card counter over 100 (it is amber normally)
 USED_COLOR = STATUS_COLORS[availability.USED]  # same yellow as the Availability screen
 NAME_ROLE = Qt.UserRole  # deck list items: the card name (None for headers)
@@ -218,9 +221,7 @@ class DeckMakerScreen(QWidget):
 
         top_bar = QHBoxLayout()
         top_bar.setContentsMargins(40, 30, 40, 10)
-        back_btn = QPushButton("← Back")
-        back_btn.setObjectName("backButton")
-        back_btn.clicked.connect(self._on_commander_back)
+        back_btn = back_button(self._on_commander_back)
         top_bar.addWidget(back_btn)
         top_bar.addStretch()
         outer.addLayout(top_bar)

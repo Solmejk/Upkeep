@@ -12,14 +12,15 @@ from datetime import date
 from PySide6.QtCore import Qt, QPointF, QRectF
 from PySide6.QtGui import QPainter, QColor, QPen, QPainterPath, QFontMetrics
 from PySide6.QtWidgets import QWidget
+from ui import theme
 
-LINE_COLOR = QColor("#e8a838")   # app accent
-SURFACE = QColor("#1a1a1a")      # page background (marker ring)
-GRID_COLOR = QColor("#2d2d2d")
-CROSSHAIR_COLOR = QColor("#555555")
-TEXT_PRIMARY = QColor("#e8e8e8")
-TEXT_MUTED = QColor("#888888")
-TOOLTIP_BG = QColor("#222222")
+LINE_COLOR = QColor(theme.ACCENT)   # app accent
+SURFACE = QColor(theme.PAGE_BG)      # page background (marker ring)
+GRID_COLOR = QColor(theme.BORDER)
+CROSSHAIR_COLOR = QColor(theme.FAINT)
+TEXT_PRIMARY = QColor(theme.TEXT)
+TEXT_MUTED = QColor(theme.MUTED)
+TOOLTIP_BG = QColor(theme.SURFACE)
 
 PAD_LEFT, PAD_RIGHT, PAD_TOP, PAD_BOTTOM = 64, 16, 34, 24
 MARKER_D = 8          # marker diameter

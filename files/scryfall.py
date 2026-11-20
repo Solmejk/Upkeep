@@ -89,34 +89,54 @@ def back_cache_name(card: dict) -> str:
     return f"back_{card_key(card)}"
 
 
-def _search_prints(query: str) -> list[dict]:
-    """Runs one rate-limited Scryfall card-search query, sorted by EUR
-    price ascending. query: a full Scryfall search query string (already
-    including any name/price filters). Returns the raw list of card
-    objects from the response's "data" field, or [] on any failure
-    (network error, no results, or a 429 that didn't clear after one
-    backoff-and-retry)."""
-    for attempt in range(2):  # one retry, since a burst can trip the limit even under it
-        try:
-            _rate_limiter.wait()
-            response = requests.get(
-                SEARCH_URL,
-                params={"q": query, "unique": "prints", "order": "eur", "dir": "asc"},
-                headers=HEADERS,
-                timeout=15,
-            )
-            if response.status_code == 429:
-                if attempt == 0:
-                    time.sleep(5)  # back off well past the momentary burst, then retry once
-                    continue
-                return []
-            if response.status_code == 404:  # nothing in the batch has a eur price at all
-                return []
+def search(query: str, unique: str = "cards", order: str | None = None, direction: str | None = None,
+           include_extras: bool = False, max_pages: int | None = None, quiet: bool = False,
+           timeout: int = 20) -> list[dict]:
+    """One Scryfall card search — the shared way every module searches.
+    query: Scryfall search syntax. unique: "cards" (one per card) or
+    "prints" (every printing). order / direction: e.g. "eur" / "asc",
+    "released" / "desc". include_extras: tokens, art cards etc. too.
+    max_pages: stop after this many pages (175 cards each; None = all).
+
+    Every request goes through the shared rate limiter; a 429 ("too many
+    requests") backs off once and retries. No matches -> []. Other
+    failures raise — unless quiet, which returns what was found so far
+    (used where a missing result is acceptable, e.g. price lookups)."""
+    params = {"q": query, "unique": unique}
+    if order:
+        params["order"] = order
+    if direction:
+        params["dir"] = direction
+    if include_extras:
+        params["include_extras"] = "true"
+    url, results, pages = SEARCH_URL, [], 0
+    try:
+        while url and (max_pages is None or pages < max_pages):
+            response = _get(url, params, timeout)
+            if response.status_code == 404:  # no matches
+                break
             response.raise_for_status()
-            return response.json().get("data", [])
-        except Exception:
-            return []
-    return []
+            page = response.json()
+            results += page.get("data", [])
+            pages += 1
+            url, params = page.get("next_page"), None  # next_page already holds the query
+    except Exception:
+        if not quiet:
+            raise
+    return results
+
+
+def _get(url: str, params: dict | None, timeout: int):
+    """A rate-limited GET to the Scryfall API, retrying once after a 429
+    (a burst can trip the limit even under our own throttle)."""
+    for attempt in range(2):
+        _rate_limiter.wait()
+        response = requests.get(url, params=params, headers=HEADERS, timeout=timeout)
+        if response.status_code == 429 and attempt == 0:
+            time.sleep(5)  # back off well past the momentary burst
+            continue
+        return response
+    return response
 
 
 def cheapest_prices_eur(card_names: list[str]) -> dict[str, dict | None]:
@@ -139,7 +159,8 @@ def cheapest_prices_eur(card_names: list[str]) -> dict[str, dict | None]:
     for i in range(0, len(unique_names), BATCH_SIZE):
         batch = unique_names[i:i + BATCH_SIZE]
         name_clauses = " or ".join(f'!"{name}"' for name in batch)
-        prints = _search_prints(f"({name_clauses}) eur>0")
+        prints = search(f"({name_clauses}) eur>0", unique="prints", order="eur", direction="asc",
+                        max_pages=1, quiet=True)
         for p in prints:
             name = p.get("name", "")
             price = p.get("prices", {}).get("eur")
@@ -189,20 +210,10 @@ def all_paper_printings(scryfall_id: str) -> list[dict]:
     printing, newest first — tokens included (include_extras). One request
     to find its oracle ID, then one per 175 printings. Raises on network
     errors."""
-    _rate_limiter.wait()
-    response = requests.get(CARD_URL + scryfall_id, headers=HEADERS, timeout=15)
+    response = _get(CARD_URL + scryfall_id, None, 15)
     response.raise_for_status()
     oracle_id = response.json().get("oracle_id")
     if not oracle_id:
         return []
-    params = {"q": f"oracleid:{oracle_id} -is:digital", "unique": "prints",
-              "include_extras": "true", "order": "released", "dir": "desc"}
-    url, printings = SEARCH_URL, []
-    while url:
-        _rate_limiter.wait()
-        response = requests.get(url, params=params, headers=HEADERS, timeout=15)
-        response.raise_for_status()
-        page = response.json()
-        printings.extend(page.get("data", []))
-        url, params = page.get("next_page"), None  # next_page already has the query
-    return printings
+    return search(f"oracleid:{oracle_id} -is:digital", unique="prints", include_extras=True,
+                  order="released", direction="desc")

@@ -14,7 +14,8 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushBu
 from card_fields import plural
 from models import game_tracker as gt
 from ui.components.overlay_modal import OverlayModal
-from ui.components.player_modal import _Tile, elo_color, MUTED, WIN_COLOR, LOSS_COLOR
+from ui.components.player_modal import StatTile
+from ui.theme import elo_color, MUTED, WIN as WIN_COLOR, LOSS as LOSS_COLOR
 from ui.components.value_chart import ValueChart
 
 CONTENT_WIDTH = 580
@@ -85,7 +86,7 @@ class TrackerDeckModal(OverlayModal):
         tiles = QHBoxLayout()
         tiles.setSpacing(8)
         self._elo, self._games, self._wins, self._rate = (
-            _Tile("Elo"), _Tile("Games"), _Tile("Wins"), _Tile("Win rate"))
+            StatTile("Elo"), StatTile("Games"), StatTile("Wins"), StatTile("Win rate"))
         for tile in (self._elo, self._games, self._wins, self._rate):
             tiles.addWidget(tile)
         layout.addLayout(tiles)

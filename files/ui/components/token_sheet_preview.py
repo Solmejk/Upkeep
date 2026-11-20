@@ -12,12 +12,13 @@ from PySide6.QtWidgets import QWidget
 import scryfall
 import token_print as tp
 from ui.image_loader import ImageLoader
+from ui import theme
 
 MIN_PAGE_PX_W, MAX_PAGE_PX_W = 300, 640  # page width range — it grows with the window (set_page_width)
 PAGE_GAP = 34             # between pages (room for the "Page n of m" label)
 PAPER = QColor("#f4f4f4")
 PLACEHOLDER = QColor("#d0d0d0")
-TEXT_MUTED = QColor("#888888")
+TEXT_MUTED = QColor(theme.MUTED)
 
 
 class TokenSheetPreview(QWidget):
@@ -99,7 +100,7 @@ class TokenSheetPreview(QWidget):
                     painter.drawPixmap(rect, pixmap, QRectF(pixmap.rect()))
                 else:
                     painter.fillRect(rect, PLACEHOLDER)
-                    painter.setPen(QColor("#555555"))
+                    painter.setPen(QColor(theme.FAINT))
                     painter.drawText(rect, Qt.AlignCenter | Qt.TextWordWrap, token["name"])
 
             painter.setPen(TEXT_MUTED)

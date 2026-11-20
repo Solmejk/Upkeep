@@ -9,9 +9,11 @@ import html
 
 from PySide6.QtCore import Qt, Signal, QRectF
 from PySide6.QtGui import QPixmap, QPainter, QPainterPath, QColor, QImage, QLinearGradient
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
+from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 from ui.image_loader import ImageLoader
+from ui.components.clickable_label import ClickableLabel
+from ui import theme
 
 # The picture's hover border (style.qss: QLabel#imageTilePicture, 2px). The
 # image is drawn inside it — BORDER px smaller on every side, corners
@@ -48,7 +50,7 @@ def make_placeholder(width: int, height: int, radius: int) -> QPixmap:
 
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing)
-    painter.setBrush(QColor("#2a2a2a"))
+    painter.setBrush(QColor(theme.CONTROL_BG))
     painter.setPen(Qt.NoPen)
     painter.drawRoundedRect(QRectF(0, 0, width, height), radius, radius)
     painter.end()
@@ -77,19 +79,6 @@ def paint_tint_overlay(painter: QPainter, rect: QRectF, radius: float, color: QC
         painter.setBrush(color)
     painter.drawRoundedRect(rect, radius, radius)
     painter.restore()
-
-
-class ClickableLabel(QLabel):
-    """A QLabel that emits `clicked` on left-click — used wherever a plain
-    label (image, caption, sidebar avatar/username) needs to act as a
-    button."""
-
-    clicked = Signal()
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.clicked.emit()
-        super().mousePressEvent(event)
 
 
 class ImageTile(QWidget):

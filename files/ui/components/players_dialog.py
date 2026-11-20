@@ -43,12 +43,15 @@ class PlayersDialog(QDialog):
 
         side = QVBoxLayout()
         self._buttons = {}
-        for key, text in (("guest", "Add guest…"), ("moxfield", "Add Moxfield player…"),
-                          ("rename", "Rename…"), ("link", "Link to Moxfield…"), ("delete", "Delete")):
+        for key, text, slot in (("guest", "Add guest…", self._on_guest),
+                                ("moxfield", "Add Moxfield player…", self._on_moxfield),
+                                ("rename", "Rename…", self._on_rename),
+                                ("link", "Link to Moxfield…", self._on_link),
+                                ("delete", "Delete", self._on_delete)):
             btn = QPushButton(text)
             if key in ("rename", "link", "delete"):
                 btn.setObjectName("backButton")
-            btn.clicked.connect(getattr(self, f"_on_{key}"))
+            btn.clicked.connect(slot)
             side.addWidget(btn)
             self._buttons[key] = btn
         side.addStretch()
@@ -69,8 +72,7 @@ class PlayersDialog(QDialog):
         games = {s.player.id: s.games for s in self.tracker.player_stats()}
         self._list.clear()
         for player in self.tracker.players_sorted():
-            you = (self.app.is_logged_in and player.kind == gt.MOXFIELD
-                   and player.username.lower() == self.app.username.lower())
+            you = self.app.is_me(player)
             kind = "you · Moxfield" if you else ("Moxfield" if player.kind == gt.MOXFIELD else "guest")
             item = QListWidgetItem(f"{player.full_name}   ({kind}, {plural(games.get(player.id, 0), 'game')})")
             item.setData(Qt.UserRole, player.id)

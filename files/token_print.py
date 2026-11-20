@@ -14,13 +14,8 @@ from docx import Document
 from docx.shared import Mm, Pt
 from PIL import Image
 
-import os
-import time
-
-import requests
-
 import scryfall
-from paths import IMAGES_DIR
+from image_cache import get_original_image_path
 
 IMAGE_WIDTH_MM = 88   # the rotated card's width = a card's 88 mm height
 IMAGE_HEIGHT_MM = 63  # ... and its height = a card's 63 mm width
@@ -42,28 +37,11 @@ def print_image_url(token: dict) -> str:
 
 def print_image_path(token: dict) -> Path | None:
     """Local path of the token's print image, downloading it if needed
-    (None if it can't be). Its own download rather than image_cache's:
-    these PNGs are ~1.8 MB and the first request for one can be slow while
-    Scryfall's servers fetch it, so it gets a longer timeout and retries."""
-    path = IMAGES_DIR / f"print_{scryfall.card_key(token)}.png"
-    if path.exists():
-        return path
-    url = print_image_url(token)
-    if not url:
-        return None
-    for attempt in range(3):
-        try:
-            response = requests.get(url, headers=scryfall.HEADERS, timeout=30)
-            response.raise_for_status()
-        except requests.RequestException:
-            time.sleep(2 * (attempt + 1))
-            continue
-        IMAGES_DIR.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".part")
-        tmp.write_bytes(response.content)
-        os.replace(tmp, path)  # never leaves a half-written image behind
-        return path
-    return None
+    (None if it can't be). These PNGs are ~1.8 MB and the first request
+    for one can be slow while Scryfall's servers fetch it, so the download
+    gets a longer timeout and two retries."""
+    return get_original_image_path(print_image_url(token), f"print_{scryfall.card_key(token)}",
+                                   timeout=30, retries=2)
 
 
 def build_document(tokens_with_counts: list, output_path: Path, progress=None) -> int:

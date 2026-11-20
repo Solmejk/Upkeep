@@ -13,7 +13,7 @@ import card_sort
 from card_fields import plural
 from ui.components.sort_button import build_sort_button
 from languages import entry_language
-from models.deck_draft import deck_card_printing_key, entry_printing_key
+from printing import deck_card_printing_key, entry_printing_key
 from app import MTGApp
 from models import price_history, value_history
 from ui.components.card_grid_view import CardGridView

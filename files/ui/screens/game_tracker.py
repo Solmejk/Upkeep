@@ -22,13 +22,15 @@ from PySide6.QtWidgets import (
 
 from card_fields import plural
 from models import game_tracker as gt
+from ui.components.clickable_label import ClickableLabel
 from ui.components.game_dialog import GameDialog
 from ui.components.players_dialog import PlayersDialog
+from ui import theme
 
-WIN_COLOR = "#4caf50"   # same green as elsewhere
-LOSS_COLOR = "#d9534f"  # same red as elsewhere
-MUTED = "#888888"
-TEXT = "#e8e8e8"
+WIN_COLOR = theme.WIN
+LOSS_COLOR = theme.LOSS
+MUTED = theme.MUTED
+TEXT = theme.TEXT
 GAMES_COLUMN_WIDTH = 440
 TABLE_MAX_ROWS = 12  # taller tables scroll
 PLAYER_ID_ROLE = Qt.UserRole + 1  # table cells naming a player carry their id
@@ -37,25 +39,16 @@ NAME_COLUMN_MIN = 170  # player / deck names: at least this wide, else as wide a
 NAME_COLUMN_MAX = 340  # …up to this; longer names end in "…" (the full name is in the tooltip)
 
 
-class _NameLabel(QLabel):
-    """A clickable player name in the games log. Keeps the click to itself
-    (accepts it), so the game card underneath doesn't also open its editor."""
-
-    def __init__(self, text: str, color: str, bold: bool, on_click):
-        super().__init__(text)
-        self.setCursor(Qt.PointingHandCursor)
-        self.setToolTip("Click for their stats")
-        weight = "bold" if bold else "normal"
-        self.setStyleSheet(f"QLabel {{ color: {color}; font-weight: {weight}; background: transparent; }}"
-                           f"QLabel:hover {{ text-decoration: underline; }}")
-        self._on_click = on_click
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            event.accept()
-            self._on_click()
-        else:
-            super().mousePressEvent(event)
+def _name_label(text: str, color: str, bold: bool, on_click) -> ClickableLabel:
+    """A clickable player name in the games log (ClickableLabel keeps the
+    click, so the game card underneath doesn't also open its editor)."""
+    label = ClickableLabel(text)
+    label.setToolTip("Click for their stats")
+    weight = "bold" if bold else "normal"
+    label.setStyleSheet(f"QLabel {{ color: {color}; font-weight: {weight}; background: transparent; }}"
+                        f"QLabel:hover {{ text-decoration: underline; }}")
+    label.clicked.connect(on_click)
+    return label
 
 
 class _GameRow(QFrame):
@@ -93,16 +86,16 @@ class _GameRow(QFrame):
             won = seat.player_id == game.winner_id
             label = screen.player_label(players[seat.player_id])
             if won:
-                line.addWidget(_NameLabel("✓ " + label, WIN_COLOR, True, open_player(seat.player_id)))
+                line.addWidget(_name_label("✓ " + label, WIN_COLOR, True, open_player(seat.player_id)))
             else:
                 line.addSpacing(16)  # lines up with the winner's name after its ✓
-                line.addWidget(_NameLabel(label, TEXT, False, open_player(seat.player_id)))
+                line.addWidget(_name_label(label, TEXT, False, open_player(seat.player_id)))
             deck = QLabel(f"— {seat.deck.name}" + (" ·" if seat.borrowed else ""))
             deck.setStyleSheet(f"color: {MUTED}; background: transparent;")
             line.addWidget(deck)
             if seat.borrowed:  # e.g. "— Edgar Markov · Solmejk's"
                 owner = players[seat.owner_id].display_name + "'s"
-                line.addWidget(_NameLabel(owner, MUTED, False, open_player(seat.owner_id)))
+                line.addWidget(_name_label(owner, MUTED, False, open_player(seat.owner_id)))
             line.addStretch()
             layout.addLayout(line)
         if game.notes:
@@ -143,13 +136,7 @@ def _name_cell(text: str, color: str = TEXT, tooltip: str = "") -> _SortItem:
     return _cell(text, text.lower(), color, Qt.AlignLeft, tooltip)
 
 
-def _elo_color(elo: float) -> str:
-    """Above / below the 1500 start in green / red."""
-    if elo >= gt.ELO_START + 0.5:
-        return WIN_COLOR
-    if elo <= gt.ELO_START - 0.5:
-        return LOSS_COLOR
-    return TEXT
+_elo_color = theme.elo_color
 
 
 def _stats_table(headers: list) -> QTableWidget:
@@ -255,9 +242,7 @@ class GameTrackerScreen(QWidget):
 
     # --------------------------------------------------------- display
     def player_label(self, player: gt.Player) -> str:
-        you = (self.app.is_logged_in and player.kind == gt.MOXFIELD
-               and player.username.lower() == self.app.username.lower())
-        return f"{player.display_name} (you)" if you else player.display_name
+        return f"{player.display_name} (you)" if self.app.is_me(player) else player.display_name
 
     def showEvent(self, event):
         """Re-reads from disk each time the tab opens (cheap, keeps it fresh)."""

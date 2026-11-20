@@ -3,9 +3,10 @@ screen's "Search syntax" page. Keep in sync with card_search.py.
 """
 
 import html
+from ui import theme
 
-_ACCENT = "#e8a838"
-_MUTED = "#888888"
+_ACCENT = theme.ACCENT
+_MUTED = theme.MUTED
 
 
 def _rows(rows):

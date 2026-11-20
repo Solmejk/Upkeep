@@ -20,6 +20,7 @@ import scryfall
 import token_print
 from card_fields import plural
 from models import token_printings
+from ui.components.section_card import back_button
 from ui.background import run_in_background
 from ui.components.image_tile import ImageTile
 from ui.components.token_sheet_preview import TokenSheetPreview
@@ -44,9 +45,7 @@ class TokenPrinterScreen(QWidget):
         outer.setSpacing(14)
 
         top_bar = QHBoxLayout()
-        back_btn = QPushButton("← Back")
-        back_btn.setObjectName("backButton")
-        back_btn.clicked.connect(self.back_requested.emit)
+        back_btn = back_button(self.back_requested.emit)
         top_bar.addWidget(back_btn)
         top_bar.addStretch()
         outer.addLayout(top_bar)

@@ -21,7 +21,6 @@ names per request, through the shared rate limiter).
 import re
 from datetime import date
 
-import requests
 
 import scryfall
 from cardmarket import moxfield_card
@@ -125,27 +124,11 @@ def _newest(names: list, foil: bool = False) -> dict:
         for i in range(0, len(todo), NAME_BATCH):
             batch = todo[i:i + NAME_BATCH]
             clauses = " or ".join(f'!"{n}"' for n in batch)
-            for card in _search(f"({clauses}) {query_filter} prefer:newest"):
+            for card in scryfall.search(f"({clauses}) {query_filter} prefer:newest"):
                 for n in batch:
                     if n not in found and _matches(n, card):
                         found[n] = card
     return found
-
-
-def _search(query: str) -> list:
-    """All pages of a unique-cards Scryfall search ([] if nothing matches)."""
-    params = {"q": query, "unique": "cards"}
-    url, results = scryfall.SEARCH_URL, []
-    while url:
-        scryfall._rate_limiter.wait()
-        response = requests.get(url, params=params, headers=scryfall.HEADERS, timeout=20)
-        if response.status_code == 404:  # no matches
-            break
-        response.raise_for_status()
-        page = response.json()
-        results += page.get("data", [])
-        url, params = page.get("next_page"), None
-    return results
 
 
 def resolve(lines: list) -> tuple[list, list]:

@@ -12,12 +12,13 @@ from PySide6.QtGui import QPainter, QColor, QPainterPath, QFont
 from PySide6.QtWidgets import QWidget, QToolTip
 
 from card_fields import plural
+from ui import theme
 
-BAR_COLOR = QColor("#e8a838")        # app accent
+BAR_COLOR = QColor(theme.ACCENT)        # app accent
 BAR_HOVER_COLOR = QColor("#f5c46a")  # same as the accent buttons' hover
-TEXT_COLOR = QColor("#e8e8e8")
-MUTED_COLOR = QColor("#888888")
-BASELINE_COLOR = QColor("#2d2d2d")
+TEXT_COLOR = QColor(theme.TEXT)
+MUTED_COLOR = QColor(theme.MUTED)
+BASELINE_COLOR = QColor(theme.BORDER)
 
 BAR_RADIUS = 4
 BAR_GAP = 2

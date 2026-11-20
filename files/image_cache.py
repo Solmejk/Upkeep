@@ -5,6 +5,7 @@ scryfall.card_image_cache_name for the card-specific naming scheme).
 
 import os
 import threading
+import time
 from pathlib import Path
 import requests
 
@@ -26,9 +27,11 @@ def get_image_path(url: str, name: str) -> Path | None:
     return get_original_image_path(url, name)
 
 
-def get_original_image_path(url: str, name: str) -> Path | None:
+def get_original_image_path(url: str, name: str, timeout: int = 10, retries: int = 0) -> Path | None:
     """get_image_path without the custom-image override — the real
-    Scryfall image (the card image editor's "original")."""
+    Scryfall image (the card image editor's "original"). timeout /
+    retries: for big images (the Token Printer's ~1.8 MB print PNGs,
+    whose first request can be slow), wait longer and try again."""
     if not url:
         return None
 
@@ -41,11 +44,15 @@ def get_original_image_path(url: str, name: str) -> Path | None:
     if path.exists():
         return path
     
-    try:
-        response = requests.get(url, headers=HEADERS, timeout=10)
-        response.raise_for_status()
-    except requests.RequestException:
-        return None
+    for attempt in range(retries + 1):
+        try:
+            response = requests.get(url, headers=HEADERS, timeout=timeout)
+            response.raise_for_status()
+            break
+        except requests.RequestException:
+            if attempt == retries:
+                return None
+            time.sleep(2 * (attempt + 1))
 
     # Write to a unique temp file and rename into place, so a reader (or a
     # second download of the same image — the background prefetcher and an

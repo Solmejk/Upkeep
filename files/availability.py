@@ -5,7 +5,7 @@ up elsewhere, and how many are actually free to use."""
 import scryfall
 from languages import entry_language
 from models import deck_languages
-from models.deck_draft import deck_card_printing_key, printing_key
+from printing import deck_card_printing_key, printing_key
 
 FREE = "free"
 USED = "used"

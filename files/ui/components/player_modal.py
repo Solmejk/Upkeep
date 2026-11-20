@@ -14,22 +14,17 @@ from card_fields import plural
 from models import game_tracker as gt
 from ui.components.overlay_modal import OverlayModal
 from ui.components.value_chart import ValueChart
+from ui import theme
 
 CONTENT_WIDTH = 580
-WIN_COLOR, LOSS_COLOR, TEXT, MUTED, ACCENT = "#4caf50", "#d9534f", "#e8e8e8", "#888888", "#e8a838"
+WIN_COLOR, LOSS_COLOR, TEXT, MUTED, ACCENT = theme.WIN, theme.LOSS, theme.TEXT, theme.MUTED, theme.ACCENT
 MAX_OTHER_DECKS = 6
 
 
-def elo_color(elo: float) -> str:
-    """Above / below the 1500 start in green / red."""
-    if elo >= gt.ELO_START + 0.5:
-        return WIN_COLOR
-    if elo <= gt.ELO_START - 0.5:
-        return LOSS_COLOR
-    return TEXT
+elo_color = theme.elo_color  # kept importable from here
 
 
-class _Tile(QFrame):
+class StatTile(QFrame):
     """A stat tile: big value, small label under it."""
 
     def __init__(self, label: str):
@@ -72,7 +67,7 @@ class PlayerModal(OverlayModal):
         tiles = QHBoxLayout()
         tiles.setSpacing(8)
         self._elo, self._games, self._wins, self._rate = (
-            _Tile("Elo"), _Tile("Games"), _Tile("Wins"), _Tile("Win rate"))
+            StatTile("Elo"), StatTile("Games"), StatTile("Wins"), StatTile("Win rate"))
         for tile in (self._elo, self._games, self._wins, self._rate):
             tiles.addWidget(tile)
         layout.addLayout(tiles)

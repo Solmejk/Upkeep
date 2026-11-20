@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QToolButton, QMenu
 
 from paths import ASSETS_DIR
 from ui.icon_utils import tinted_icon
+from ui import theme
 
 
 def build_sort_button(modes: dict, current: str, on_changed) -> QToolButton:
@@ -16,7 +17,7 @@ def build_sort_button(modes: dict, current: str, on_changed) -> QToolButton:
     checked mode. on_changed(mode): called when another mode is picked."""
     button = QToolButton()
     button.setText(" Sort")
-    button.setIcon(tinted_icon(ASSETS_DIR / "sort.png", "#e8e8e8", size=14))
+    button.setIcon(tinted_icon(ASSETS_DIR / "sort.png", theme.TEXT, size=14))
     button.setIconSize(QSize(14, 14))
     button.setPopupMode(QToolButton.InstantPopup)
 

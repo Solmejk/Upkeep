@@ -13,10 +13,10 @@ returns here), then call self._add_app(...) in __init__.
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
-    QStackedWidget, QScrollArea, QSizePolicy,
+    QWidget, QVBoxLayout, QLabel, QStackedWidget, QScrollArea,
 )
 
+from ui.components.section_card import SectionCard
 from ui.screens.purchases import PurchasesScreen
 from ui.screens.token_printer import TokenPrinterScreen
 from ui.screens.availability import AvailabilityScreen
@@ -94,30 +94,8 @@ class OtherAppsScreen(QWidget):
         self._pages.addWidget(widget)
         widget.back_requested.connect(self.show_hub)
 
-        section = QFrame()
-        section.setObjectName("settingsSection")
-        section.setMaximumWidth(480)
-        section.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)  # scroll, don't squash
-        layout = QVBoxLayout(section)
-        layout.setContentsMargins(20, 16, 20, 16)
-        layout.setSpacing(12)
-
-        header = QLabel(name)
-        header.setObjectName("settingsSectionTitle")
-        layout.addWidget(header)
-
-        text = QLabel(description)
-        text.setObjectName("settingsDescription")
-        text.setWordWrap(True)
-        layout.addWidget(text)
-
-        button_row = QHBoxLayout()
-        button_row.addStretch()
-        open_btn = QPushButton(button_text)
-        open_btn.clicked.connect(lambda: self._pages.setCurrentWidget(widget))
-        button_row.addWidget(open_btn)
-        layout.addLayout(button_row)
-
+        section = SectionCard(name, description)
+        section.add_button(button_text, lambda: self._pages.setCurrentWidget(widget))
         self._hub_layout.addWidget(section)
 
     def show_hub(self):

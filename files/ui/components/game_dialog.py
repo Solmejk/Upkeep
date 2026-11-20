@@ -132,8 +132,7 @@ class GameDialog(QDialog):
         return self.tracker.add_moxfield(self.app.username) if self.app.is_logged_in else None
 
     def _player_label(self, player: gt.Player) -> str:
-        if self.app.is_logged_in and player.kind == gt.MOXFIELD \
-                and player.username.lower() == self.app.username.lower():
+        if self.app.is_me(player):
             return f"{player.full_name} (you)"
         return player.full_name if player.kind == gt.MOXFIELD else f"{player.display_name} · guest"
 
@@ -249,8 +248,7 @@ class GameDialog(QDialog):
         """DeckRefs to offer for a player (see the module docstring)."""
         if player is None:
             return []
-        is_me = (self.app.is_logged_in and player.kind == gt.MOXFIELD
-                 and player.username.lower() == self.app.username.lower())
+        is_me = self.app.is_me(player)
         # your decks: just the active ones (an archived deck of an edited
         # game is still kept — see _fill_decks); others: what they've played
         decks = [] if is_me else list(self.tracker.decks_owned_by(player.id))

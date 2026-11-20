@@ -10,7 +10,8 @@ from PySide6.QtWidgets import (
 )
 
 from image_cache import get_image_path
-from ui.components.image_tile import ClickableLabel, make_placeholder
+from ui.components.clickable_label import ClickableLabel
+from ui.components.image_tile import make_placeholder
 
 
 def make_circular(pixmap: QPixmap, size: int) -> QPixmap:

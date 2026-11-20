@@ -3,7 +3,6 @@ Composes Collection and Deck — loading a User cascades into loading
 (cache-only, or force-fetching) all three.
 """
 
-import requests
 import cache_io
 import moxfield
 import paths
@@ -68,9 +67,7 @@ class User:
             if data is None:
                 return
         else:
-            response = requests.get(moxfield.user_api_url(self._username), timeout=10)
-            response.raise_for_status()
-            data = response.json()
+            data = moxfield.fetch_profile(self._username)
             cache_io.write_json(path, data, indent=2)
 
         self._profile_image_url = data.get("profileImageUrl", "")
@@ -88,25 +85,7 @@ class User:
         if not force:
             decks = cache_io.read_json(path) or {"data": []}
         else:
-            url = moxfield.decks_search_api_url()
-            params = {
-                "includePinned": "false",
-                "showIllegal": "true",
-                "authorUserNames": self._username,
-                "sortType": "updated",
-                "sortDirection": "descending",
-                "board": "mainboard",
-                "pageNumber": 1,
-                "pageSize": 100,  # Moxfield's max; defaults to 25
-            }
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            decks = response.json()
-            for page in range(2, decks.get("totalPages", 1) + 1):
-                params["pageNumber"] = page
-                response = requests.get(url, params=params, timeout=10)
-                response.raise_for_status()
-                decks["data"].extend(response.json()["data"])
+            decks = moxfield.search_decks(self._username, timeout=10)
             cache_io.write_json(path, decks)
 
         self._decks = []

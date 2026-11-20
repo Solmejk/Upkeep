@@ -6,6 +6,7 @@ DeckDetail's active/archived toggle).
 from PySide6.QtCore import Qt, Signal, QRectF, QPropertyAnimation, Property
 from PySide6.QtGui import QPainter, QColor, QBrush
 from PySide6.QtWidgets import QWidget
+from ui import theme
 
 
 class ToggleSwitch(QWidget):
@@ -81,7 +82,7 @@ class ToggleSwitch(QWidget):
 
         # Track
         if self._checked:
-            track_color = QColor("#e8a838")
+            track_color = QColor(theme.ACCENT)
         else:
             track_color = QColor("#444444")
         painter.setPen(Qt.NoPen)

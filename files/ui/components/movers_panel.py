@@ -11,10 +11,11 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
 
 import scryfall
 from ui.components.image_tile import ImageTile
+from ui import theme
 
-RISE_COLOR = "#4caf50"  # same green as "free" on the Availability screen
-FALL_COLOR = "#d9534f"  # same red as "unowned"
-TEXT_MUTED = "#888888"
+RISE_COLOR = theme.WIN
+FALL_COLOR = theme.LOSS
+TEXT_MUTED = theme.MUTED
 IMG_W, IMG_H = 96, 134  # card proportions
 COLUMN_W = 124  # wider than the image, so "−€12.40 (−16%)" fits
 

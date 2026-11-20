@@ -24,8 +24,7 @@ from ui.screens.deck_maker import DeckMakerScreen
 from ui.screens.other_apps import OtherAppsScreen
 from ui.screens.game_tracker import GameTrackerScreen
 from ui.components.card_modal import CardModal
-from ui.components.export_modal import ExportModal
-from ui.components.deck_export_modal import DeckExportModal
+from ui.components.export_modal import DeckExportModal, ExportModal
 from ui.components.player_modal import PlayerModal
 from ui.components.tracker_deck_modal import TrackerDeckModal
 from ui.background import run_in_background
@@ -180,9 +179,7 @@ class MainWindow(QMainWindow):
             self.game_tracker_screen.reload()  # fresh data (e.g. clicked from Home)
         tracker = self.game_tracker_screen.tracker
         player = tracker.players[player_id]
-        you = (self.app.is_logged_in and player.kind == "moxfield"
-               and player.username.lower() == self.app.username.lower())
-        self.player_modal.show_player(tracker, player_id, you)
+        self.player_modal.show_player(tracker, player_id, self.app.is_me(player))
 
     def _on_deck_imported(self, deck_id: str):
         """A decklist was imported (Decks screen): reload the deck lists so

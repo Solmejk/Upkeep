@@ -16,10 +16,11 @@ import deck_stats
 from card_fields import plural
 from models import deck_languages, local_decks
 from models import token_printings
+from ui.components.section_card import back_button
 from ui.components.card_section import build_card_section, rebuild_card_sections, quantity_caption
 from ui.components.deck_stats_row import DeckStatsRow, average_text
 from ui.components.deck_elo_block import DeckEloBlock
-from ui.components.player_modal import elo_color
+from ui.theme import elo_color
 from ui.components.language_check_dialog import LanguageCheckDialog
 from ui.components.search_box import SearchBox
 from ui.components.toggle_switch import ToggleSwitch
@@ -57,9 +58,7 @@ class DeckDetailScreen(QWidget):
         top_bar = QHBoxLayout()
         top_bar.setContentsMargins(40, 30, 40, 10)
 
-        back_btn = QPushButton("← Back")
-        back_btn.setObjectName("backButton")
-        back_btn.clicked.connect(self.back_requested.emit)
+        back_btn = back_button(self.back_requested.emit)
         top_bar.addWidget(back_btn)
         top_bar.addStretch()
 

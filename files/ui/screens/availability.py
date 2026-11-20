@@ -18,18 +18,21 @@ from app import MTGApp
 from models import saved_availability_decks
 from models.deck import Deck
 from paths import ASSETS_DIR
+from ui.components.section_card import back_button
 from ui.background import run_in_background
 from ui.components.card_section import rebuild_card_sections, quantity_caption
+from ui.components.clickable_label import ClickableLabel
 from ui.components.sort_button import build_sort_button
 from ui.icon_utils import tinted_icon, tinted_pixmap
+from ui import theme
 
 ICON_SIZE = QSize(16, 16)
 
 
 STATUS_COLORS = {
-    availability.FREE: QColor("#4caf50"),
-    availability.USED: QColor("#e8a838"),
-    availability.UNOWNED: QColor("#d9534f"),
+    availability.FREE: QColor(theme.WIN),
+    availability.USED: QColor(theme.WARN),
+    availability.UNOWNED: QColor(theme.LOSS),
 }
 STATUS_LABELS = {
     availability.FREE: "Free",
@@ -46,23 +49,6 @@ SORT_LABELS = {
     SORT_NAME: "Name",
 }
 INACTIVE_COLOR = QColor("#444444")
-
-
-class _ClickableIconLabel(QLabel):
-    """A plain QLabel showing a tinted icon that emits `clicked` on
-    left-click — the Save/bookmark control, a bare icon rather than a
-    bordered button."""
-
-    clicked = Signal()
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setCursor(Qt.PointingHandCursor)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.clicked.emit()
-        super().mousePressEvent(event)
 
 
 class _LegendChip(QWidget):
@@ -112,7 +98,7 @@ class _LegendChip(QWidget):
         state (full color when active, dimmed gray when inactive)."""
         color = self._color if self._active else INACTIVE_COLOR
         self._swatch.setStyleSheet(f"background-color: {color.name()}; border-radius: 3px;")
-        text_color = "#e8e8e8" if self._active else "#666666"
+        text_color = theme.TEXT if self._active else theme.DIMMED
         self._label.setStyleSheet(f"color: {text_color};")
 
 
@@ -271,9 +257,7 @@ class AvailabilityScreen(QWidget):
         # deck's results are showing it clears back to the blank check
         # screen (and the saved-decks list); from there, to Other Apps.
         self._viewing = False
-        back_btn = QPushButton("← Back")
-        back_btn.setObjectName("backButton")
-        back_btn.clicked.connect(self._on_back_clicked)
+        back_btn = back_button(self._on_back_clicked)
         title_layout.addWidget(back_btn, 0, Qt.AlignLeft)
         title_layout.addSpacing(10)
 
@@ -309,8 +293,8 @@ class AvailabilityScreen(QWidget):
         # Only appears while viewing a deck's results — a bare bookmark
         # icon (title row, top right). Swaps to the filled "checked" icon
         # once the current deck is saved.
-        self._save_btn = _ClickableIconLabel()
-        self._save_btn.setPixmap(tinted_pixmap(ASSETS_DIR / "bookmark-unchecked.png", "#e8a838", size=20))
+        self._save_btn = ClickableLabel()  # a bare bookmark icon, not a bordered button
+        self._save_btn.setPixmap(tinted_pixmap(ASSETS_DIR / "bookmark-unchecked.png", theme.ACCENT, size=20))
         self._save_btn.setToolTip("Save this deck to the list below the URL box")
         self._save_btn.clicked.connect(self._on_save_clicked)
         self._save_btn.hide()
@@ -471,7 +455,7 @@ class AvailabilityScreen(QWidget):
         and checked (already saved) icon for the currently-viewed deck."""
         already_saved = self._last_deck_id is not None and saved_availability_decks.is_saved(self._last_deck_id)
         icon_name = "bookmark-checked.png" if already_saved else "bookmark-unchecked.png"
-        self._save_btn.setPixmap(tinted_pixmap(ASSETS_DIR / icon_name, "#e8a838", size=20))
+        self._save_btn.setPixmap(tinted_pixmap(ASSETS_DIR / icon_name, theme.ACCENT, size=20))
         self._save_btn.setToolTip("Saved — click to remove" if already_saved else "Save this deck")
 
     def _on_check_failed(self, message: str):

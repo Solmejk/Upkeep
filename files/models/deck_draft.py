@@ -3,7 +3,7 @@ user's collection. Each deck card is a copy of the collection entry it
 was added from with "quantity" set to the copies in the deck — the same
 shape as collection entries, so card_search predicates work on both.
 Copies are tracked per printing (set + collector number + finish +
-language, see printing_key), since that's what the collection owns.
+language, see printing.py), since that's what the collection owns.
 
 Basic lands are the exception: they're added in any quantity outside the
 collection (most collections don't track basics), and kept separately
@@ -11,7 +11,7 @@ as name -> count in `basic_lands`.
 """
 
 from card_fields import front_type
-from languages import DEFAULT_LANGUAGE, deck_card_language, entry_language
+from printing import entry_printing_key
 
 DECK_SIZE = 100  # commander format: commander + 99 — the target, not a cap:
                  # a draft may go over while options are being gathered
@@ -19,33 +19,6 @@ DECK_SIZE = 100  # commander format: commander + 99 — the target, not a cap:
 COLORS = "WUBRG"
 BASIC_LANDS = {"W": "Plains", "U": "Island", "B": "Swamp", "R": "Mountain", "G": "Forest"}
 COLORLESS_BASIC = "Wastes"
-
-
-def printing_key(set_code: str, cn: str, is_foil: bool, finish: str, language: str = DEFAULT_LANGUAGE) -> tuple:
-    """Identifies one exact owned version of a card: printing + finish
-    (nonfoil / foil / etched) + language. Works for collection entries
-    and deck cards alike — see entry_printing_key / deck_card_printing_key.
-    Returns (set, cn, finish, language)."""
-    finish = str(finish or "").lower()
-    if finish != "etched":
-        finish = "foil" if is_foil or finish == "foil" else "nonfoil"
-    return (str(set_code).lower(), str(cn), finish, str(language or DEFAULT_LANGUAGE).lower())
-
-
-def entry_printing_key(entry: dict) -> tuple:
-    """printing_key of a collection entry (or a DeckDraft card)."""
-    card = entry["card"]
-    return printing_key(card.get("set", ""), card.get("cn", ""), entry.get("isFoil"), entry.get("finish"),
-                        entry_language(entry))
-
-
-def deck_card_printing_key(card: dict) -> tuple:
-    """printing_key of a saved deck's card (models.deck.Deck.cards — flat
-    set/cn/isFoil/finish; decks cached before finish was stored count as
-    nonfoil; Moxfield decks don't record language, so English — see
-    languages.deck_card_language)."""
-    return printing_key(card.get("set", ""), card.get("cn", ""), card.get("isFoil"), card.get("finish"),
-                        deck_card_language(card))
 
 
 def is_unlimited(card: dict) -> bool:

@@ -4,7 +4,6 @@ Used both for the current user's own decks and for ad-hoc decks fetched
 by URL (the Availability screen's "checked" deck).
 """
 
-import requests
 import cache_io
 import moxfield
 import paths
@@ -132,9 +131,7 @@ class Deck:
             if data is None:
                 return
         else:
-            response = requests.get(moxfield.deck_api_url(self._deck_id), timeout=10)
-            response.raise_for_status()
-            data = self._trim_raw_deck(response.json())
+            data = self._trim_raw_deck(moxfield.fetch_deck(self._deck_id))
             cache_io.write_json(path, data)
 
         self._name = data["name"]

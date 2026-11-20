@@ -14,30 +14,16 @@ import scryfall
 from app import MTGApp
 from card_fields import plural
 from models import game_tracker as gt
+from ui.components.clickable_label import ClickableLabel
 from ui.components.image_tile import ImageTile
-from ui.components.player_modal import elo_color
+from ui.theme import elo_color
 from ui.components.showcase_panel import ShowcasePanel
+from ui import theme
 
-MUTED = "#888888"
+MUTED = theme.MUTED
 ART_W, ART_H = 120, 168
 # a card image by (fuzzy) name — for decks typed in by name, without a commander on file
 NAMED_IMAGE_URL = "https://api.scryfall.com/cards/named?format=image&version=normal&fuzzy={}"
-
-
-class _Clickable(QLabel):
-    """A label that calls on_click on a left click (and keeps the click)."""
-
-    def __init__(self, on_click):
-        super().__init__()
-        self.setCursor(Qt.PointingHandCursor)
-        self._on_click = on_click
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            event.accept()
-            self._on_click()
-        else:
-            super().mousePressEvent(event)
 
 
 class _TrackerCard(QFrame):
@@ -87,7 +73,8 @@ class _TrackerCard(QFrame):
         heading.setObjectName("settingsSectionTitle")
         text.addWidget(heading)
 
-        elo = _Clickable(lambda: self._home.player_clicked.emit(me.id))
+        elo = ClickableLabel()
+        elo.clicked.connect(lambda: self._home.player_clicked.emit(me.id))
         elo.setTextFormat(Qt.RichText)
         elo.setText(f"<span style='font-size:30px; font-weight:bold; color:{elo_color(stats.elo)}'>"
                     f"{stats.elo:.0f}</span> <span style='color:{MUTED}'>Elo</span>")
@@ -100,7 +87,8 @@ class _TrackerCard(QFrame):
 
         if best is not None:
             text.addSpacing(8)
-            deck = _Clickable(lambda: self._home.deck_clicked.emit(best.key))
+            deck = ClickableLabel()
+            deck.clicked.connect(lambda: self._home.deck_clicked.emit(best.key))
             deck.setTextFormat(Qt.RichText)
             deck.setWordWrap(True)
             deck.setText(

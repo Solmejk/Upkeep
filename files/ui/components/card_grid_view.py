@@ -20,6 +20,7 @@ import scryfall
 from languages import entry_language
 from ui.image_loader import ImageLoader
 from ui.components.image_tile import make_placeholder, paint_tint_overlay
+from ui import theme
 
 
 CELL_WIDTH = 140  # default; CardGridView(cell_width=...) overrides it
@@ -149,7 +150,7 @@ class CardThumbnailDelegate(QStyledItemDelegate):
         if option.state & QStyle.State_MouseOver:
             painter.save()
             painter.setRenderHint(QPainter.Antialiasing)
-            pen = QPen(QColor(status_color) if status_color is not None else QColor("#e8a838"))
+            pen = QPen(QColor(status_color) if status_color is not None else QColor(theme.ACCENT))
             pen.setWidth(2)
             painter.setPen(pen)
             painter.setBrush(Qt.NoBrush)
@@ -161,7 +162,7 @@ class CardThumbnailDelegate(QStyledItemDelegate):
         
         # Caption
         painter.save()
-        painter.setPen(QColor("#e8e8e8"))
+        painter.setPen(QColor(theme.TEXT))
         font = painter.font()
         font.setBold(True)
         font.setPointSize(9)
@@ -188,7 +189,7 @@ class CardThumbnailDelegate(QStyledItemDelegate):
             painter.setPen(QColor("#ffd700"))
             painter.drawText(QRect(x_cursor, caption_y, foil_width, CAPTION_HEIGHT), Qt.AlignTop | Qt.AlignLeft, foil_prefix)
             x_cursor += foil_width
-            painter.setPen(QColor("#e8e8e8"))
+            painter.setPen(QColor(theme.TEXT))
             painter.drawText(QRect(x_cursor, caption_y, rest_width, CAPTION_HEIGHT), Qt.AlignTop | Qt.AlignLeft, rest)
         else:
             painter.drawText(caption_rect, Qt.AlignTop | Qt.AlignHCenter, elided)

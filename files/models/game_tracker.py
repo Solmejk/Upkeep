@@ -33,8 +33,6 @@ from dataclasses import dataclass, field, asdict
 from datetime import date, datetime
 from pathlib import Path
 
-import requests
-
 import cache_io
 import moxfield
 import paths
@@ -541,12 +539,8 @@ def plural_players(n: int) -> str:
 
 
 def fetch_moxfield_decks(username: str) -> list:
-    """A Moxfield user's public decks as DeckRefs (newest first, up to 100)
-    — one request. Raises on network errors / unknown users."""
-    params = {"authorUserNames": username, "sortType": "updated", "sortDirection": "descending",
-              "showIllegal": "true", "board": "mainboard", "pageNumber": 1, "pageSize": 100}
-    response = requests.get(moxfield.decks_search_api_url(), params=params, timeout=15)
-    response.raise_for_status()
+    """A Moxfield user's public decks as DeckRefs, newest first
+    (moxfield.search_decks). Raises on network errors / unknown users."""
     return [DeckRef(name=d["name"], source=DECK_MOXFIELD, deck_id=d["publicId"],
                     colors=list(d.get("colorIdentity") or []))
-            for d in response.json().get("data", [])]
+            for d in moxfield.search_decks(username).get("data", [])]

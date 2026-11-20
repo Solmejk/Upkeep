@@ -19,7 +19,7 @@ import uuid
 import cache_io
 import paths
 from languages import entry_language
-from models.deck_draft import entry_printing_key, printing_key
+from printing import entry_printing_key, printing_key
 
 
 def load() -> list[dict]:

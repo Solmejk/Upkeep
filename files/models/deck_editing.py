@@ -12,7 +12,8 @@ are reported back as left out.
 """
 
 from models import deck_languages
-from models.deck_draft import BASIC_LANDS, COLORLESS_BASIC, DeckDraft, deck_card_printing_key, entry_printing_key
+from models.deck_draft import BASIC_LANDS, COLORLESS_BASIC, DeckDraft
+from printing import deck_card_printing_key, entry_printing_key
 
 BASIC_LAND_NAMES = set(BASIC_LANDS.values()) | {COLORLESS_BASIC}
 

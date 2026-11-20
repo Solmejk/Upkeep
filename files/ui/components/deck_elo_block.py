@@ -10,10 +10,11 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
 
 from card_fields import plural
 from models import game_tracker as gt
-from ui.components.player_modal import elo_color
+from ui.theme import elo_color
 from ui.components.value_chart import ValueChart
+from ui import theme
 
-MUTED = "#888888"
+MUTED = theme.MUTED
 WIDTH, CHART_HEIGHT = 300, 130
 
 

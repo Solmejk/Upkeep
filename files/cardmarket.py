@@ -234,6 +234,11 @@ def moxfield_card(sc: dict) -> dict:
     }
 
 
+def _cheapest_first(query: str) -> list:
+    """Printings matching `query`, cheapest first (one page; [] on errors)."""
+    return scryfall.search(query, unique="prints", order="eur", direction="asc", max_pages=1, quiet=True)
+
+
 def _is_promo_set(cm_set: str) -> bool:
     """Cardmarket promo sets: its catch-all "PROM" (Promos — own
     numbering, no Scryfall equivalent) and "P" + set code (PEOE, ...)."""
@@ -245,7 +250,7 @@ def _promo_printing(line: dict):
     promo printings of the card, preferring the same collector number,
     then one that comes in the line's finish (foil / nonfoil). None if
     the card has no promo printing."""
-    promos = [c for c in scryfall._search_prints(f'!"{line["name"]}" is:promo game:paper')
+    promos = [c for c in _cheapest_first(f'!"{line["name"]}" is:promo game:paper')
               if _names_match(line["name"], c)]
     if not promos:
         return None
@@ -307,8 +312,8 @@ def _lookup(lines: list) -> list:
     for i, card in enumerate(results):
         if card and card.get("digital"):
             name = card["name"]
-            paper = (scryfall._search_prints(f'!"{name}" game:paper eur>0')
-                     or scryfall._search_prints(f'!"{name}" game:paper'))
+            paper = (_cheapest_first(f'!"{name}" game:paper eur>0')
+                     or _cheapest_first(f'!"{name}" game:paper'))
             if paper:
                 results[i] = paper[0]
     return results

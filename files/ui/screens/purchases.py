@@ -19,13 +19,15 @@ from pathlib import Path
 import cardmarket
 from card_fields import plural
 from models import purchases
-from models.deck_draft import entry_printing_key
+from printing import entry_printing_key
+from ui.components.section_card import back_button
 from ui.background import run_in_background
 from ui.icon_utils import check_icon
 from ui.screens.collection import CollectionScreen
+from ui import theme
 
 ROW_HEIGHT = 34  # purchase list row
-RECEIVED_COLOR = "#4caf50"  # same green as "free" on the Availability screen
+RECEIVED_COLOR = theme.WIN
 
 
 def purchase_summary(p: dict) -> str:
@@ -75,9 +77,7 @@ class PurchasesScreen(QWidget):
         outer.setSpacing(16)
 
         top_bar = QHBoxLayout()
-        back_btn = QPushButton("← Back")
-        back_btn.setObjectName("backButton")
-        back_btn.clicked.connect(self.back_requested.emit)
+        back_btn = back_button(self.back_requested.emit)
         top_bar.addWidget(back_btn)
         top_bar.addStretch()
         outer.addLayout(top_bar)
@@ -163,9 +163,7 @@ class PurchasesScreen(QWidget):
 
         # Back button before the title; export / delete after it
         header = self._detail._header_layout
-        back_btn = QPushButton("← Back")
-        back_btn.setObjectName("backButton")
-        back_btn.clicked.connect(self.reload)  # card counts may have changed
+        back_btn = back_button(self.reload)  # reload: card counts may have changed
         header.insertWidget(0, back_btn)
         header.insertSpacing(1, 16)
         self._received_btn = QPushButton()
@@ -299,7 +297,7 @@ class PurchasesScreen(QWidget):
         """"Mark received", or a green "Received" (click to undo)."""
         if self._purchase.get("received"):
             self._received_btn.setText("Received")
-            self._received_btn.setIcon(check_icon("#1a1a1a"))
+            self._received_btn.setIcon(check_icon(theme.PAGE_BG))
             self._received_btn.setToolTip("Click to mark as not received")
             self._received_btn.setStyleSheet(
                 f"QPushButton {{ background-color: {RECEIVED_COLOR}; color: #1a1a1a; }}")
