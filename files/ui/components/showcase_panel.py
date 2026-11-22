@@ -94,6 +94,11 @@ class ShowcasePanel(QWidget):
         self._picker.setMinimumWidth(220)
         self._picker.currentIndexChanged.connect(self._on_showcase_picked)
         bar.addWidget(self._picker)
+        # With no showcases there's no dropdown (and so no "+ New showcase…"
+        # entry): this button stands in for it
+        self._new_btn = QPushButton("New showcase")
+        self._new_btn.clicked.connect(self._new)
+        bar.addWidget(self._new_btn)
         bar.addStretch()
         self._last_index = -1  # the showcase shown before "+ New showcase…" was picked
         layout.addLayout(bar)
@@ -269,7 +274,7 @@ class ShowcasePanel(QWidget):
         self._name_btn.style().unpolish(self._name_btn)  # re-apply [editing] style
         self._name_btn.style().polish(self._name_btn)
         if showcase is None:
-            self._hint.setText("Create a showcase to show off cards from your collection — "
+            self._hint.setText("Use New showcase to show off cards from your collection — "
                                "pick them, put them in any order, and make as many showcases as you like.")
         elif editing:
             self._hint.setText("Add cards · drag to reorder · right-click to remove · Save when you're done"
@@ -284,6 +289,7 @@ class ShowcasePanel(QWidget):
         has_showcase = showcase is not None
         for widget in (self._picker, self._name_btn, self._count):
             widget.setVisible(has_showcase)
+        self._new_btn.setVisible(not has_showcase)
         flippable = has_showcase and bool(showcase["cards"]) and showcase.get("flippable", True)
         self._flip_btn.setVisible(flippable)
         if not flippable and self._flipped:  # back to the fronts
