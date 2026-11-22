@@ -39,15 +39,13 @@ QToolButton:hover {
 }
 """
 
-# Width stays constant; height instead adapts per card between these two
-# bounds — small by default (a card with little/no owned/used-in info
-# doesn't need a tall box with lots of empty space below it), growing only
-# as far as actually needed, up to the max. Independent of the window
-# size either way — never grows to fill a fullscreen window. Content that
-# still doesn't fit at the max scrolls as one unit instead.
+# Width stays constant; height fits each card's content exactly (never
+# below the min, so short cards don't look cramped). The only limit is the
+# window: the popout keeps WINDOW_MARGIN free above and below, and only if
+# the window is too short for the content does it scroll, as one unit.
 MODAL_CONTENT_WIDTH = CARD_IMG_WIDTH + 60
 MODAL_MIN_HEIGHT = 650
-MODAL_MAX_HEIGHT = 850
+WINDOW_MARGIN = 20
 
 
 class CardModal(OverlayModal):
@@ -228,8 +226,9 @@ class CardModal(OverlayModal):
         else:
             self._used_in_label.hide()
 
+        self._show_overlay()  # covers the window first: its height is the limit
         self._resize_to_fit()
-        self._show_overlay()
+        self._scroll.verticalScrollBar().setValue(0)  # each card starts at the top
 
     def _choose_token_printing(self):
         """Opens the printing picker for the shown token; after a change,
@@ -260,12 +259,16 @@ class CardModal(OverlayModal):
         else:
             self._set_image(get_image_path(card.get("image_url", ""), scryfall.card_image_cache_name(card)))
 
+    def resizeEvent(self, event):
+        """The window was resized while shown: refit to the new height."""
+        super().resizeEvent(event)
+        if self.isVisible() and self._card is not None:
+            self._resize_to_fit()
+
     def _resize_to_fit(self):
-        """Sets the popout's height to fit this card's actual content,
-        clamped between MODAL_MIN_HEIGHT and MODAL_MAX_HEIGHT — small by
-        default, growing only as far as needed. Content beyond the max
-        still scrolls (see the scroll area in __init__)."""
-        self._inner.adjustSize()
+        """Sets the popout's height to fit this card's whole content (at
+        least MODAL_MIN_HEIGHT), as long as the window has room for it;
+        only a too-short window makes the content scroll."""
         content_layout = self._content.layout()
         margins = content_layout.contentsMargins()
         chrome = (
@@ -273,9 +276,16 @@ class CardModal(OverlayModal):
             + content_layout.spacing()
             + self._close_btn.sizeHint().height()
         )
-        desired = self._inner.sizeHint().height() + chrome
-        height = max(MODAL_MIN_HEIGHT, min(MODAL_MAX_HEIGHT, desired))
-        self._content.setFixedHeight(height)
+        # measured at the real width, so wrapped text counts all its lines
+        inner_width = MODAL_CONTENT_WIDTH - margins.left() - margins.right()
+        inner_layout = self._inner.layout()
+        inner_layout.activate()
+        needed = (inner_layout.totalHeightForWidth(inner_width) if inner_layout.hasHeightForWidth()
+                  else inner_layout.totalSizeHint().height())
+        desired = max(MODAL_MIN_HEIGHT, needed + chrome)
+        if self.parent() is not None:
+            desired = min(desired, self.parent().height() - 2 * WINDOW_MARGIN)
+        self._content.setFixedHeight(desired)
 
 
 def _used_line(use: dict) -> str:

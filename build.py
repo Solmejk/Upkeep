@@ -17,6 +17,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -65,7 +66,15 @@ def main():
         sys.exit("\nInno Setup 6 not found, so no installer was made "
                  "(winget install JRSoftware.InnoSetup, or use --no-installer).")
     ver = version()
-    run(iscc, "/Q", f"/DAppVersion={ver}", ISS)
+    for attempt in range(3):  # antivirus scanning the new file can make this fail now and then
+        try:
+            run(iscc, "/Q", f"/DAppVersion={ver}", ISS)
+            break
+        except subprocess.CalledProcessError:
+            if attempt == 2:
+                raise
+            print("Installer step failed (often antivirus scanning the file); trying again...")
+            time.sleep(3)
     setup = ROOT / "dist" / f"Upkeep-Setup-{ver}.exe"
     print(f"Built {setup} ({setup.stat().st_size / 1_000_000:.0f} MB)")
 
