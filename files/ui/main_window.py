@@ -28,7 +28,9 @@ from ui.components.export_modal import DeckExportModal, ExportModal
 from ui.components.player_modal import PlayerModal
 from ui.components.tracker_deck_modal import TrackerDeckModal
 from ui.background import run_in_background
+from ui.update_flow import UpdateFlow
 import clear_cache
+import paths
 import scryfall
 import session
 import sync
@@ -127,6 +129,18 @@ class MainWindow(QMainWindow):
         self.deck_detail_screen.export_requested.connect(self.deck_export_modal.show_export)
 
         QTimer.singleShot(50, self._lazy_load_decks)
+
+        # Updates (ui/update_flow.py): checked shortly after every start of
+        # the built app; a newer release shows the sidebar's update button
+        self.update_flow = UpdateFlow(self)
+        self.update_flow.available.connect(lambda release: self.sidebar.show_update(release.version))
+        self.update_flow.available.connect(self.settings_screen.show_update_available)
+        self.update_flow.status_changed.connect(self.settings_screen.set_update_status)
+        self.sidebar.update_requested.connect(self.update_flow.offer)
+        self.settings_screen.install_update_requested.connect(self.update_flow.offer)
+        self.settings_screen.check_updates_requested.connect(lambda: self.update_flow.check(manual=True))
+        if paths.FROZEN:
+            QTimer.singleShot(3000, self.update_flow.check)
 
     def _add_page(self, name: str, widget: QWidget):
         """Registers `widget` as a navigable screen: adds a sidebar entry

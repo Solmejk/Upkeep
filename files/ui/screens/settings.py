@@ -1,8 +1,8 @@
 """SettingsScreen: the cache-clearing controls (per-category toggles +
 a Clear button, emitting clear_cache_requested for MainWindow to act
 on), a Sync log sub-page showing when Moxfield was last synced
-(read from sync_log.py's text file), and a Search syntax sub-page (the
-guide in ui/search_help.py).
+(read from sync_log.py's text file), a Search syntax sub-page (the
+guide in ui/search_help.py), and an Updates card (ui/update_flow.py).
 """
 
 from PySide6.QtCore import Signal
@@ -17,6 +17,7 @@ from ui.components.section_card import SectionCard, back_button
 from ui.components.artist_proofs_panel import ArtistProofsPanel
 from ui.search_help import SEARCH_HELP_HTML
 from ui.components.toggle_switch import ToggleSwitch
+from ui.update_flow import version_label
 
 SYNC_KINDS = ("Collection", "Prices", "Decks", "Profile")
 
@@ -28,6 +29,8 @@ class SettingsScreen(QWidget):
     clear_cache_requested = Signal(list)  # list of strings: "collection", "decks", "profile", "images"
     proofs_changed = Signal()  # artist proofs added / changed / removed
     refresh_requested = Signal()  # "Refresh all" (Sync section): profile, collection, prices, decks
+    check_updates_requested = Signal()  # Updates → Check for updates
+    install_update_requested = Signal()  # Updates → Update to vX (shown once one is found)
 
     def __init__(self, app=None):
         """Builds the main settings page and its sub-pages (Sync log,
@@ -63,7 +66,8 @@ class SettingsScreen(QWidget):
         outer.addWidget(title)
 
         for section in (self._build_sync_log_section(), self._build_cache_section(),
-                        self._build_search_help_section(), self._build_proofs_section()):
+                        self._build_search_help_section(), self._build_proofs_section(),
+                        self._build_updates_section()):
             outer.addWidget(section)  # SectionCards: fixed height, the page scrolls
 
         outer.addStretch()
@@ -102,6 +106,30 @@ class SettingsScreen(QWidget):
     def showEvent(self, event):
         super().showEvent(event)
         self._update_refresh_button()
+
+    def _build_updates_section(self) -> QWidget:
+        """The "Updates" card: this version, the last check's result, and
+        Check for updates / Update now (MainWindow's UpdateFlow does the
+        work, via the two signals)."""
+        section = SectionCard(
+            "Updates",
+            f"You're running Upkeep {version_label()}. New versions come from the GitHub "
+            "releases page; Upkeep checks for one every time it starts.")
+        self._update_status = QLabel("Not checked yet.")
+        self._update_status.setObjectName("settingsLabel")
+        self._update_status.setWordWrap(True)
+        section.body.addWidget(self._update_status)
+        section.add_button("Check for updates", self.check_updates_requested.emit, secondary=True)
+        self._install_update_btn = section.add_button("Update now", self.install_update_requested.emit)
+        self._install_update_btn.hide()
+        return section
+
+    def set_update_status(self, text: str):
+        self._update_status.setText(text)
+
+    def show_update_available(self, release):
+        self._install_update_btn.setText(f"Update to v{release.version}")
+        self._install_update_btn.show()
 
     def _build_proofs_section(self) -> QWidget:
         """The "Artist proofs" card on the main page: what they are and a

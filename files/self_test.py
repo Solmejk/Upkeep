@@ -55,7 +55,7 @@ def _pdf_reading():
 
 def _app_modules():
     import importlib
-    for name in ("cardmarket", "deck_import", "token_print", "scryfall_prices", "ui.main_window"):
+    for name in ("cardmarket", "deck_import", "token_print", "scryfall_prices", "updater", "ui.main_window"):
         importlib.import_module(name)  # each must import cleanly in the build
     from models import game_tracker
     game_tracker.GameTracker(paths.USER_ROOT / ".self_test_tracker.json")
@@ -73,7 +73,8 @@ CHECKS = [
 
 def run() -> int:
     """Runs every check, writes the report, returns the exit code."""
-    lines = [f"Upkeep self-test ({'packaged' if paths.FROZEN else 'from source'})",
+    from version import VERSION
+    lines = [f"Upkeep {VERSION} self-test ({'packaged' if paths.FROZEN else 'from source'})",
              f"data folder: {paths.USER_ROOT}", ""]
     failed = 0
     for name, check in CHECKS:

@@ -19,9 +19,9 @@ AppId={{836EABBF-180D-4F63-9BE2-17D75C599FBC}
 AppName=Upkeep
 AppVersion={#AppVersion}
 AppPublisher=Solmejk
-AppPublisherURL=https://github.com/Solmejk/MTG_APP
-AppSupportURL=https://github.com/Solmejk/MTG_APP/issues
-AppUpdatesURL=https://github.com/Solmejk/MTG_APP/releases
+AppPublisherURL=https://github.com/Solmejk/Upkeep
+AppSupportURL=https://github.com/Solmejk/Upkeep/issues
+AppUpdatesURL=https://github.com/Solmejk/Upkeep/releases
 DefaultDirName={localappdata}\Programs\Upkeep
 DefaultGroupName=Upkeep
 DisableProgramGroupPage=yes
@@ -50,4 +50,6 @@ Name: "{autoprograms}\Upkeep"; Filename: "{app}\Upkeep.exe"
 Name: "{autodesktop}\Upkeep"; Filename: "{app}\Upkeep.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\Upkeep.exe"; Description: "{cm:LaunchProgram,Upkeep}"; Flags: nowait postinstall skipifsilent
+; Not skipped when silent: the in-app updater (files/updater.py) runs this
+; Setup with /SILENT after closing Upkeep, and this reopens the new version.
+Filename: "{app}\Upkeep.exe"; Description: "{cm:LaunchProgram,Upkeep}"; Flags: nowait postinstall

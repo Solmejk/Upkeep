@@ -23,6 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 EXE = ROOT / "dist" / "Upkeep.exe"
 ISS = ROOT / "installer" / "upkeep.iss"
+BUILD_INFO = ROOT / "files" / "_build_info.py"
 
 
 def run(*args):
@@ -56,8 +57,14 @@ def find_iscc() -> Path | None:
 def main():
     if "--skip-tests" not in sys.argv:
         run(sys.executable, "-m", "pytest", "-q")
-    run(sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "Upkeep.spec")
-    print(f"\nBuilt {EXE} ({EXE.stat().st_size / 1_000_000:.0f} MB)")
+    ver = version()
+    # the .exe's own version (files/version.py) — only for this build
+    BUILD_INFO.write_text(f'VERSION = "{ver}"  # written by build.py, deleted after the build\n', encoding="utf-8")
+    try:
+        run(sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "Upkeep.spec")
+    finally:
+        BUILD_INFO.unlink(missing_ok=True)
+    print(f"\nBuilt {EXE} ({EXE.stat().st_size / 1_000_000:.0f} MB), version {ver}")
 
     if "--no-installer" in sys.argv:
         return
@@ -65,7 +72,6 @@ def main():
     if iscc is None:
         sys.exit("\nInno Setup 6 not found, so no installer was made "
                  "(winget install JRSoftware.InnoSetup, or use --no-installer).")
-    ver = version()
     for attempt in range(3):  # antivirus scanning the new file can make this fail now and then
         try:
             run(iscc, "/Q", f"/DAppVersion={ver}", ISS)

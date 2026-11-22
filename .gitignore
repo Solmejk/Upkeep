@@ -22,6 +22,7 @@ files/self_test.txt
 # --- Build output (python build.py) ----------------------------------------
 build/
 dist/
+files/_build_info.py
 
 # --- Editors / tools ------------------------------------------------------
 .claude/

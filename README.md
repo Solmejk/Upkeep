@@ -8,10 +8,10 @@ Built with Python and Qt (PySide6). Runs on Windows. It should also run on macOS
 
 ## Download
 
-From the [Releases page](https://github.com/Solmejk/MTG_APP/releases) (Windows 10/11, no Python needed), get either:
+From the [Releases page](https://github.com/Solmejk/Upkeep/releases) (Windows 10/11, no Python needed), get either:
 
-- **`Upkeep-Setup-<version>.exe`** (recommended): installs Upkeep to `%LOCALAPPDATA%\Programs\Upkeep` with a Start Menu entry, an optional desktop shortcut and an uninstaller under Windows Settings → Apps. No admin rights needed. To update, run the newer Setup.
-- **`Upkeep-<version>-portable.exe`**: no installation; put it anywhere and run it.
+- **`Upkeep-Setup-<version>.exe`** (recommended): installs Upkeep to `%LOCALAPPDATA%\Programs\Upkeep` with a Start Menu entry, an optional desktop shortcut and an uninstaller under Windows Settings → Apps. No admin rights needed. **Updates itself:** when a new release is out, an **Update to vX** button appears in the sidebar (also under Settings → Updates); one click downloads it, and Upkeep closes, updates and reopens.
+- **`Upkeep-<version>-portable.exe`**: no installation; put it anywhere and run it. It tells you about new versions too, but you download them yourself.
 
 Either way:
 
@@ -215,4 +215,6 @@ git push origin v1.0.0
 ```
 
 GitHub Actions (`.github/workflows/release.yml`) then runs the tests, builds the .exe on Windows, runs its self-test, and publishes a Release with `Upkeep-Setup-1.0.0.exe` and `Upkeep-1.0.0-portable.exe` attached. To try the build without releasing, run the **Build Windows app** workflow from the Actions tab — both files are then downloadable from that run.
+
+Installed copies of Upkeep check the latest Release on every start (`files/updater.py`), so publishing a release is all it takes to update everyone. Use a higher version number each time; the tag is also the version the app reports.
 

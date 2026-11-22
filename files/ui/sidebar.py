@@ -1,12 +1,12 @@
 """Sidebar: the left-hand navigation column — profile avatar/username
-(doubling as the login button), and the page nav list MainWindow builds
-via add_item().
+(doubling as the login button), the page nav list MainWindow builds
+via add_item(), and an "Update to vX" button when a new version is out.
 """
 
 from PySide6.QtCore import Qt, Signal, QRect
 from PySide6.QtGui import QPixmap, QPainter, QPainterPath
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QListWidget, QListWidgetItem,
+    QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QPushButton,
 )
 
 from image_cache import get_image_path
@@ -47,6 +47,7 @@ def make_circular(pixmap: QPixmap, size: int) -> QPixmap:
 class Sidebar(QWidget):
     nav_changed = Signal(int)  # emitted with the clicked nav row's index
     login_requested = Signal()  # emitted when the avatar/username is clicked
+    update_requested = Signal()  # the "Update to vX" button (only shown when there's one)
 
     def __init__(self, app):
         """Builds the profile header and (initially empty) nav list.
@@ -62,6 +63,23 @@ class Sidebar(QWidget):
         layout.addWidget(self._build_header(app))
         self._list = self._build_nav_list()
         layout.addWidget(self._list, 1)
+
+        # Shown only when a newer version is out (ui/update_flow.py)
+        self._update_btn = QPushButton()
+        self._update_btn.setObjectName("sidebarUpdateButton")
+        self._update_btn.setCursor(Qt.PointingHandCursor)
+        self._update_btn.clicked.connect(self.update_requested.emit)
+        self._update_btn.hide()
+        update_row = QHBoxLayout()
+        update_row.setContentsMargins(16, 8, 16, 16)
+        update_row.addWidget(self._update_btn)
+        layout.addLayout(update_row)
+
+    def show_update(self, version: str):
+        """Shows the "Update to vX" button at the bottom."""
+        self._update_btn.setText(f"Update to v{version}")
+        self._update_btn.setToolTip("A new version of Upkeep is available")
+        self._update_btn.show()
 
     def _build_header(self, app) -> QWidget:
         """Builds the avatar + username block and populates it via
