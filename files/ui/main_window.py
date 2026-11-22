@@ -57,9 +57,9 @@ class MainWindow(QMainWindow):
         self.sidebar = Sidebar(app)
         self.stack = QStackedWidget()
 
-        self.home_screen = HomeScreen(app)
-        self.decks_screen = DecksScreen(app)
-        self.collection_screen = CollectionScreen(app)
+        self.home_screen = self._new_home_screen()
+        self.decks_screen = self._new_decks_screen()
+        self.collection_screen = self._new_collection_screen()
         self.deck_maker_screen = DeckMakerScreen(app)
         self.game_tracker_screen = GameTrackerScreen(app)
         self.other_apps_screen = OtherAppsScreen(app)
@@ -81,17 +81,11 @@ class MainWindow(QMainWindow):
         self.sidebar.set_current(0)
         self.sidebar.login_requested.connect(self._on_login_requested)
 
-        self.decks_screen.deck_selected.connect(self._open_deck_detail)
-        self.decks_screen.delete_requested.connect(self._delete_deck)
-        self.decks_screen.deck_imported.connect(self._on_deck_imported)
         self.deck_detail_screen.back_requested.connect(self._close_deck_detail)
         self.deck_detail_screen.delete_requested.connect(self._delete_deck)
         self.deck_detail_screen.edit_requested.connect(self._edit_deck)
         # confirmed languages change which exact copies count as used
         self.deck_detail_screen.languages_changed.connect(self.deck_maker_screen.refresh_usage)
-
-        # Refresh from Moxfield (home: everything; decks/collection: just that part)
-        self._connect_refresh_buttons()
 
         # Artist proofs changed (settings screen): show the new images
         self.settings_screen.proofs_changed.connect(self._on_proofs_changed)
@@ -114,7 +108,6 @@ class MainWindow(QMainWindow):
         self.deck_detail_screen.card_clicked.connect(self.card_modal.show_card)
         self.deck_detail_screen.tracker_deck_clicked.connect(self._show_tracker_deck)
         self.card_modal.token_printing_changed.connect(self._on_token_printing_changed)
-        self.collection_screen.card_clicked.connect(self.card_modal.show_card)
         self.deck_maker_screen.card_clicked.connect(self.card_modal.show_card)
         self.other_apps_screen.card_clicked.connect(self.card_modal.show_card)
         self.deck_maker_screen.deck_saved.connect(self._rebuild_data_screens)  # show it on Decks etc.
@@ -142,6 +135,40 @@ class MainWindow(QMainWindow):
         self.sidebar.add_item(name)
         self.stack.addWidget(widget)
 
+    # ------------------------------------------------- rebuilt screens
+    # Home, Decks and Collection snapshot the app's data when they're built,
+    # so they're replaced (not updated) after refreshes, logins and cache
+    # clears. Each is built AND wired in exactly one place — its factory —
+    # so a rebuilt screen can never come back missing a connection.
+
+    def _new_home_screen(self) -> HomeScreen:
+        screen = HomeScreen(self.app)
+        screen.card_clicked.connect(self._show_card)          # a showcase card
+        screen.player_clicked.connect(self._show_player)      # your Elo
+        screen.deck_clicked.connect(self._show_tracker_deck)  # your best deck
+        return screen
+
+    def _new_decks_screen(self) -> DecksScreen:
+        screen = DecksScreen(self.app)
+        screen.deck_selected.connect(self._open_deck_detail)
+        screen.delete_requested.connect(self._delete_deck)
+        screen.deck_imported.connect(self._on_deck_imported)
+        screen.refresh_requested.connect(
+            lambda: self._start_refresh(sync.refresh_decks, "Decks page", "decks_screen"))
+        return screen
+
+    def _new_collection_screen(self) -> CollectionScreen:
+        screen = CollectionScreen(self.app)
+        screen.card_clicked.connect(self._show_card)
+        screen.refresh_requested.connect(
+            lambda: self._start_refresh(sync.refresh_collection, "Collection page", "collection_screen"))
+        return screen
+
+    def _show_card(self, card: dict):
+        """Opens the card popout (a method, so screens built before the
+        popout exists can connect to it)."""
+        self.card_modal.show_card(card)
+
     def _open_deck_detail(self, deck):
         """Slot for DecksScreen.deck_selected: ensures `deck`'s contents
         are loaded (cache-only first, then a forced fetch if the cache
@@ -161,9 +188,8 @@ class MainWindow(QMainWindow):
         screen. The deck's active/archived flag may have been toggled on
         the detail screen, so the Decks grid (active-only filter) and
         Home (active/archived counts) are rebuilt to reflect it."""
-        self.decks_screen._rebuild_grid()
-        self._replace_screen("home_screen", HomeScreen(self.app))
-        self._connect_home_refresh()
+        self.decks_screen.rebuild_grid()
+        self._replace_screen("home_screen", self._new_home_screen())
         self.stack.setCurrentWidget(self.decks_screen)
 
     def _show_tracker_deck(self, deck_key):
@@ -193,7 +219,7 @@ class MainWindow(QMainWindow):
         """A token's default printing changed (card popup): redraw the
         open deck's Tokens section with it."""
         if self.deck_detail_screen.deck is not None:
-            self.deck_detail_screen._rebuild_sections()
+            self.deck_detail_screen.rebuild_sections()
 
     def _on_proofs_changed(self):
         """Artist proofs were added / changed / removed: rebuild the data
@@ -229,23 +255,6 @@ class MainWindow(QMainWindow):
         if self.stack.currentWidget() is self.deck_detail_screen:
             self.stack.setCurrentWidget(self.decks_screen)
         self._rebuild_data_screens()
-
-    def _connect_refresh_buttons(self):
-        """Wires the Home/Decks/Collection refresh buttons. Called again
-        after _rebuild_data_screens replaces those screens."""
-        self._connect_home_refresh()
-        self.decks_screen.refresh_requested.connect(
-            lambda: self._start_refresh(sync.refresh_decks, "Decks page", "decks_screen"))
-        self.collection_screen.refresh_requested.connect(
-            lambda: self._start_refresh(sync.refresh_collection, "Collection page", "collection_screen"))
-
-    def _connect_home_refresh(self):
-        """Wires the Home screen's showcase cards' info popout — again
-        after each rebuild. (The full refresh is Settings → Refresh all.)"""
-        self.home_screen.card_clicked.connect(lambda card: self.card_modal.show_card(card))
-        # Game Tracker card: your Elo -> your popout, best deck -> its popout
-        self.home_screen.player_clicked.connect(self._show_player)
-        self.home_screen.deck_clicked.connect(self._show_tracker_deck)
 
     def _start_refresh(self, job, source: str, screen_attr: str):
         """Runs a sync.refresh_* job for the current user in the
@@ -378,17 +387,9 @@ class MainWindow(QMainWindow):
             self.app.load(self.app.username)
         self.sidebar.refresh_profile(self.app)
 
-        self._replace_screen("home_screen", HomeScreen(self.app))
-
-        self._replace_screen("decks_screen", DecksScreen(self.app))
-        self.decks_screen.deck_selected.connect(self._open_deck_detail)
-        self.decks_screen.delete_requested.connect(self._delete_deck)
-        self.decks_screen.deck_imported.connect(self._on_deck_imported)
-
-        self._replace_screen("collection_screen", CollectionScreen(self.app))
-        self.collection_screen.card_clicked.connect(self.card_modal.show_card)
-
-        self._connect_refresh_buttons()
+        self._replace_screen("home_screen", self._new_home_screen())
+        self._replace_screen("decks_screen", self._new_decks_screen())
+        self._replace_screen("collection_screen", self._new_collection_screen())
 
         # Not rebuilt (that would lose a deck in progress) — just re-read
         self.deck_maker_screen.reload_collection()
@@ -411,21 +412,6 @@ class MainWindow(QMainWindow):
             self.stack.setCurrentWidget(new_widget)
 
         setattr(self, attr_name, new_widget)
-
-    def resizeEvent(self, event):
-        """Keeps whichever overlay (card/export modal) is currently open
-        covering the full window as it resizes."""
-        super().resizeEvent(event)
-        if hasattr(self, "card_modal") and self.card_modal.isVisible():
-            self.card_modal.resize(self.size())
-        if hasattr(self, "export_modal") and self.export_modal.isVisible():
-            self.export_modal.resize(self.size())
-        if hasattr(self, "deck_export_modal") and self.deck_export_modal.isVisible():
-            self.deck_export_modal.resize(self.size())
-        if hasattr(self, "player_modal") and self.player_modal.isVisible():
-            self.player_modal.resize(self.size())
-        if hasattr(self, "tracker_deck_modal") and self.tracker_deck_modal.isVisible():
-            self.tracker_deck_modal.resize(self.size())
 
     def _lazy_load_decks(self):
         """Kicks off loading every deck's contents in the background, so
@@ -457,8 +443,7 @@ class MainWindow(QMainWindow):
         now that deck contents (format, in particular) are available.
         _result is unused (_load_all_deck_contents returns None)."""
         # Trigger the decks screen to refresh now that data is available
-        if hasattr(self.decks_screen, "_rebuild_grid"):
-            self.decks_screen._rebuild_grid()
+        self.decks_screen.rebuild_grid()
         self.deck_maker_screen.refresh_usage()  # "used in another deck" marks need deck contents
         self._prefetch_images()
 

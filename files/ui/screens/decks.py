@@ -123,7 +123,7 @@ class DecksScreen(QWidget):
         scroll.setWidget(self._grid_container)
         outer.addWidget(scroll, 1)
 
-        self._rebuild_grid()
+        self.rebuild_grid()
 
     def set_refresh_enabled(self, enabled: bool):
         """Toggles the refresh button between its normal and
@@ -136,19 +136,19 @@ class DecksScreen(QWidget):
         """Slot for the name search box: re-filters the grid to decks whose
         name contains `text` (case- and accent-insensitive)."""
         self._name_filter = name_key(text.strip())
-        self._rebuild_grid()
+        self.rebuild_grid()
 
     def _on_active_toggled(self, value: bool):
         """Slot for the "Active only" toggle: updates the filter and
         rebuilds the grid. value: the toggle's new checked state."""
         self._active_only = value
-        self._rebuild_grid()
+        self.rebuild_grid()
 
     def _on_commander_toggled(self, value: bool):
         """Slot for the "Commander only" toggle: updates the filter and
         rebuilds the grid. value: the toggle's new checked state."""
         self._commander_only = value
-        self._rebuild_grid()
+        self.rebuild_grid()
 
     def _filtered_decks(self):
         """Yields decks from self.app.decks matching the current name
@@ -162,7 +162,7 @@ class DecksScreen(QWidget):
                 continue
             yield deck
 
-    def _rebuild_grid(self):
+    def rebuild_grid(self):
         """Clears and rebuilds the tile grid from _filtered_decks(). Note
         that a deck's `format` is only known once its contents have
         loaded — MainWindow's background deck-content load calls this

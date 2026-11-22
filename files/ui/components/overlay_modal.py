@@ -5,7 +5,7 @@ window. Subclasses build their own content widget and just call
 _init_overlay(content) once it's ready.
 """
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 
@@ -25,6 +25,8 @@ class OverlayModal(QWidget):
         self.setObjectName("cardModal")  # dim-overlay background, shared QSS
         self._content = None
         self.hide()
+        if parent is not None:
+            parent.installEventFilter(self)  # follow the window's size (see eventFilter)
 
     def _init_overlay(self, content: QWidget):
         """Wires up `content` as the centered box shown over the dimmed
@@ -50,6 +52,12 @@ class OverlayModal(QWidget):
         signal. Bound to the close button, outside-click, and Esc."""
         self.hide()
         self.closed.emit()
+
+    def eventFilter(self, obj, event):
+        """While shown, keeps covering the window as it's resized."""
+        if obj is self.parent() and event.type() == QEvent.Resize and self.isVisible():
+            self.resize(event.size())
+        return super().eventFilter(obj, event)
 
     def mousePressEvent(self, event):
         """Clicking outside the content box dismisses the overlay;

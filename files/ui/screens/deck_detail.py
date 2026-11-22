@@ -202,7 +202,7 @@ class DeckDetailScreen(QWidget):
             else "Edit this deck in the Deck Maker"
         )
         self._refresh_active_button()
-        self._rebuild_sections()
+        self.rebuild_sections()
 
     def _choose_commander(self):
         """Set commander…: pick one of the deck's possible commanders, save
@@ -277,7 +277,7 @@ class DeckDetailScreen(QWidget):
         deck_languages.save_answers(self.deck.deck_id, dialog.answers())
         self._refresh_language_warning()
         self._display_cards = self._cards_with_languages()
-        self._rebuild_sections()  # tiles/popups/search use the new languages
+        self.rebuild_sections()  # tiles/popups/search use the new languages
         self.languages_changed.emit()
 
 
@@ -304,9 +304,9 @@ class DeckDetailScreen(QWidget):
         (None shows them all)."""
         self._search_predicate = predicate
         if self.deck:
-            self._rebuild_sections()
+            self.rebuild_sections()
 
-    def _rebuild_sections(self):
+    def rebuild_sections(self):
         """Rebuilds the type-grouped card grid for the current deck —
         only cards matching the search, if there is one. Its commanders
         form their own bucket; the rest are grouped by type."""

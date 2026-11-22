@@ -134,20 +134,35 @@ files/
 ├── main.py                entry point
 ├── app.py, session.py     app state and the logged-in user
 ├── paths.py               all file locations
-├── moxfield.py, scryfall.py, scryfall_prices.py      online services
-├── sync.py, sync_log.py   refreshing from Moxfield / Scryfall
+├── moxfield.py            every Moxfield request
+├── scryfall.py            every Scryfall request (search, prices, printings)
+├── image_cache.py         every image download (cached on disk)
+├── scryfall_prices.py, sync.py, sync_log.py          refreshing from Moxfield / Scryfall
 ├── cardmarket.py          Cardmarket PDF → purchase (+ Moxfield export)
 ├── deck_import.py, deck_export.py                    Moxfield text format
 ├── token_print.py         token sheets (.docx)
-├── card_search.py, card_sort.py, deck_stats.py, ...  card logic
+├── card_search.py, card_sort.py, printing.py, ...    card logic
 ├── models/                collection, decks, local decks, purchases,
-│                          game tracker, value / price history, ...
+│   │                      value / price history, ...
+│   └── game_tracker/      data, store (GameTracker), elo, stats
 └── ui/
-    ├── main_window.py, sidebar.py, style.qss
+    ├── main_window.py, sidebar.py, theme.py, style.qss
     ├── screens/           one file per page (home, decks, collection,
-    │                      game_tracker, other_apps, purchases, ...)
+    │   │                  game_tracker, other_apps, purchases, ...)
+    │   └── deck_maker/    screen, commander page, build page, helpers
     └── components/        shared widgets: card grid, card tiles,
-                           popouts, charts, dialogs, ...
+                           clickable label, section card, popouts,
+                           charts, dialogs, ...
+tests/                     automated tests (pure logic — no network, no UI)
 ```
 
 Each module starts with a docstring that explains what it does and how it connects to the rest.
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+The tests cover the logic that's easiest to break: card search, sorting and printing keys, deck list parsing, Cardmarket PDF parsing and the Moxfield export, and the Game Tracker's rules, merging, borrowing and Elo. They never touch the network or your data.
