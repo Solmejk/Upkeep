@@ -1,4 +1,4 @@
-# MTG Collection Manager — install with:  pip install -r requirements.txt
+# Upkeep — install with:  pip install -r requirements.txt
 # (minimums are the versions it's developed and tested with)
 
 PySide6>=6.11      # user interface

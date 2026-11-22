@@ -1,17 +1,45 @@
-"""Centralized cache/data paths, anchored to this file's location rather
-than the process's current working directory.
+"""Centralized file locations, anchored to known places rather than the
+process's current working directory (a cwd-relative "files/cache/..."
+silently breaks — empty cache, no error — if the app is launched from
+elsewhere).
 
-Every module used to build its own "files/cache/..." string relative to
-cwd, which silently breaks (empty cache, no error) if the app is ever
-launched from a different directory. Anchoring to __file__ makes launch
-directory irrelevant.
+Two kinds of files:
+
+    Bundled, read-only (RESOURCE_ROOT): the icons and the stylesheet. From
+        source that's files/; in the packaged .exe (PyInstaller) it's the
+        folder the .exe unpacks itself into (sys._MEIPASS).
+    Yours, writable (USER_ROOT): the cache, your data and the crash log.
+        From source that's files/ as before; in the packaged .exe it's
+        %APPDATA%/Upkeep — the .exe's own folder is
+        temporary, so nothing there would survive a restart.
 """
 
+import os
+import sys
 from pathlib import Path
 
-FILES_ROOT = Path(__file__).parent
-ASSETS_DIR = FILES_ROOT / "assets"
-CACHE_DIR = FILES_ROOT / "cache"
+APP_NAME = "Upkeep"
+OLD_APP_NAME = "MTG Collection Manager"  # the app's name before it was Upkeep
+FROZEN = getattr(sys, "frozen", False)  # running as the packaged .exe
+
+RESOURCE_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+if FROZEN:
+    _appdata = Path(os.environ.get("APPDATA") or Path.home())
+    USER_ROOT = _appdata / APP_NAME
+    if not USER_ROOT.exists() and (_appdata / OLD_APP_NAME).is_dir():
+        try:  # one-time move of the data kept under the old name
+            (_appdata / OLD_APP_NAME).rename(USER_ROOT)
+        except OSError:
+            pass  # in use or locked: start fresh rather than fail to start
+else:
+    USER_ROOT = Path(__file__).parent
+
+ASSETS_DIR = RESOURCE_ROOT / "assets"
+STYLE_PATH = RESOURCE_ROOT / "ui" / "style.qss"
+APP_ICON_PATH = ASSETS_DIR / "app_icon.png"
+
+CRASH_LOG_PATH = USER_ROOT / "crash.log"
+CACHE_DIR = USER_ROOT / "cache"
 IMAGES_DIR = CACHE_DIR / "images"
 DECKS_DIR = CACHE_DIR / "decks"
 DECK_STATES_PATH = CACHE_DIR / "deck_states.json"
@@ -21,7 +49,7 @@ SYNC_LOG_PATH = CACHE_DIR / "sync_log.txt"
 COLLECTION_PRICES_PATH = CACHE_DIR / "collection_prices.json"  # Scryfall prices, see scryfall_prices.py
 
 # User-created data — NOT cache: clear_cache never touches this folder.
-DATA_DIR = FILES_ROOT / "data"
+DATA_DIR = USER_ROOT / "data"
 LOCAL_DECKS_DIR = DATA_DIR / "decks"  # decks built in the Deck Maker
 DECK_LANGUAGES_PATH = DATA_DIR / "deck_languages.json"  # confirmed card languages per Moxfield deck
 SHOWCASES_PATH = DATA_DIR / "showcases.json"  # Home screen showcases

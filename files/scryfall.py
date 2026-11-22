@@ -11,7 +11,7 @@ SEARCH_URL = "https://api.scryfall.com/cards/search"
 
 # Scryfall rejects requests using the HTTP library's default User-Agent.
 HEADERS = {
-    "User-Agent": "MTGCollectionManager/1.0",
+    "User-Agent": "Upkeep/1.0",
     "Accept": "*/*",
 }
 

@@ -1,3 +1,5 @@
 # Development tools — install with:  pip install -r requirements-dev.txt
 -r requirements.txt
-pytest>=8      # run the tests:  python -m pytest
+pytest>=8           # run the tests:  python -m pytest
+pyinstaller>=6.16.0   # build the .exe:   python build.py
+altgraph>=0.17.5    # (PyInstaller dependency — older versions need setuptools' pkg_resources)

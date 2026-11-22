@@ -42,7 +42,7 @@ class MainWindow(QMainWindow):
         the MTGApp facade, already loaded (or logged-out) by main.py."""
         super().__init__()
         self.app = app
-        self.setWindowTitle("MTG Collection Manager")
+        self.setWindowTitle("Upkeep")
         self.resize(1100, 750)
         self._bg_tasks = []  # keeps background tasks alive — see ui/background.py
         self._login_in_progress = False

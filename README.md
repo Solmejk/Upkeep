@@ -1,4 +1,4 @@
-# MTG Collection Manager
+# Upkeep
 
 A desktop companion app for Magic: The Gathering, focused on **paper** collections and decks. It syncs your collection and decks from [Moxfield](https://moxfield.com), takes card data and prices from [Scryfall](https://scryfall.com), and adds tools Moxfield doesn't have: availability checks across your decks, a deck builder that only uses cards you own, value and price history, a game tracker with Elo ratings, purchase tracking and token printing.
 
@@ -6,7 +6,20 @@ Built with Python and Qt (PySide6). Runs on Windows. It should also run on macOS
 
 ---
 
-## Getting started
+## Download
+
+From the [Releases page](https://github.com/Solmejk/MTG_APP/releases) (Windows 10/11, no Python needed), get either:
+
+- **`Upkeep-Setup-<version>.exe`** (recommended): installs Upkeep to `%LOCALAPPDATA%\Programs\Upkeep` with a Start Menu entry, an optional desktop shortcut and an uninstaller under Windows Settings → Apps. No admin rights needed. To update, run the newer Setup.
+- **`Upkeep-<version>-portable.exe`**: no installation; put it anywhere and run it.
+
+Either way:
+
+- Windows may show a SmartScreen warning the first time, since the app isn't code-signed: click **More info → Run anyway**.
+- The first start takes a few seconds (the single .exe unpacks itself).
+- Your data is kept in `%APPDATA%\Upkeep`, separate from the program, so updating or uninstalling never touches it. (Data from before the rename, in `%APPDATA%\MTG Collection Manager`, is moved there automatically on the first start.)
+
+## Running from source
 
 **Requirements:** Python 3.10 or newer (developed on 3.13).
 
@@ -110,12 +123,14 @@ Track game results for your playgroup.
 ## Data and online services
 
 ### What's stored where
-Everything is stored next to the code, in `files/`:
+The **downloaded app** keeps everything in `%APPDATA%\Upkeep`; **running from source** keeps it next to the code, in `files/`. Either way:
 
 | Folder | Contents | Cleared by "Clear cache"? |
 |---|---|---|
-| `files/cache/` | Moxfield data, card images, Scryfall prices, the sync log | Yes, everything except the sync log, by category |
-| `files/data/` | Things you made: local decks, showcases, custom card images, purchases, the game tracker, value and price history, default token printings | **Never** |
+| `cache/` | Moxfield data, card images, Scryfall prices, the sync log | Yes, everything except the sync log, by category |
+| `data/` | Things you made: local decks, showcases, custom card images, purchases, the game tracker, value and price history, default token printings | **Never** |
+
+To move from running the source to the downloaded app (or back), copy the `data/` folder across — the cache refills itself.
 
 ### Moxfield and Scryfall
 - **Moxfield:** your profile, collection and decks, plus other players' public deck lists for the Game Tracker. Data is fetched when you log in or refresh, and cached in between.
@@ -131,7 +146,8 @@ Everything is stored next to the code, in `files/`:
 
 ```
 files/
-├── main.py                entry point
+├── main.py                entry point (--self-test checks a build)
+├── self_test.py           the build check: bundled files + libraries
 ├── app.py, session.py     app state and the logged-in user
 ├── paths.py               all file locations
 ├── moxfield.py            every Moxfield request
@@ -154,6 +170,11 @@ files/
                            clickable label, section card, popouts,
                            charts, dialogs, ...
 tests/                     automated tests (pure logic — no network, no UI)
+tools/make_icon.py         draws the app icon (files/assets/app_icon.*)
+build.py                   builds the .exe and the installer (tests first)
+Upkeep.spec                what goes into the .exe (PyInstaller)
+installer/upkeep.iss       the Setup.exe recipe (Inno Setup)
+.github/workflows/         GitHub Actions: build + publish a Release
 ```
 
 Each module starts with a docstring that explains what it does and how it connects to the rest.
@@ -166,3 +187,32 @@ python -m pytest
 ```
 
 The tests cover the logic that's easiest to break: card search, sorting and printing keys, deck list parsing, Cardmarket PDF parsing and the Moxfield export, and the Game Tracker's rules, merging, borrowing and Elo. They never touch the network or your data.
+
+## Building the app
+
+```bash
+pip install -r requirements-dev.txt
+python build.py
+```
+
+This runs the tests, builds **`dist/Upkeep.exe`** with PyInstaller (`Upkeep.spec`), then wraps it in the installer **`dist/Upkeep-Setup-<version>.exe`** with [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`installer/upkeep.iss`; install it with `winget install JRSoftware.InnoSetup`). The version is the latest git tag, or `dev`. Options: `--skip-tests`, `--no-installer`, `--version 1.2.0`.
+
+Check a build without opening a window:
+
+```bash
+dist/Upkeep.exe --self-test
+```
+
+It confirms the bundled icons and stylesheet, the libraries features load only when used (pdfplumber, python-docx, Pillow) and a writable data folder, and writes the report to `self_test.txt` in the data folder (exit code 0 = all passed).
+
+### Publishing a release
+
+Push a version tag:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+GitHub Actions (`.github/workflows/release.yml`) then runs the tests, builds the .exe on Windows, runs its self-test, and publishes a Release with `Upkeep-Setup-1.0.0.exe` and `Upkeep-1.0.0-portable.exe` attached. To try the build without releasing, run the **Build Windows app** workflow from the Actions tab — both files are then downloadable from that run.
+
