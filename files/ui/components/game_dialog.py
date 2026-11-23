@@ -8,6 +8,8 @@ Moxfield player's public decks (fetched in the background, once per
 session), a guest's earlier decks — and also takes any typed-in name.
 """
 
+import sys
+
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QComboBox, QPushButton,
@@ -24,7 +26,19 @@ DEFAULT_SEATS = 4  # a new game starts as a typical Commander pod
 
 # Moxfield players' public decks, per username (lower case) — fetched once
 # per app session and shared by every dialog.
-_moxfield_decks_cache: dict[str, list] = {}
+_moxfield_decks_cache: dict[str, list] = {}  # username -> DeckRefs ([] if fetching failed), this session
+
+
+def _fetch_decks(username: str):
+    """Background job: (username, their Moxfield decks), or (username,
+    None) if Moxfield can't be reached — logged, never raised, so the
+    dialog can remember the failure for this player."""
+    try:
+        return username, gt.fetch_moxfield_decks(username)
+    except Exception as e:
+        print(f"Game Tracker: couldn't fetch {username}'s Moxfield decks ({e}) — "
+              "suggesting their decks from earlier games only", file=sys.stderr)
+        return username, None
 
 
 class _SeatRow:
@@ -263,9 +277,8 @@ class GameDialog(QDialog):
                 decks += _moxfield_decks_cache[key]
             elif key not in self._fetching:
                 self._fetching.add(key)
-                run_in_background(lambda u=player.username: (u, gt.fetch_moxfield_decks(u)),
-                                  self._bg_tasks, on_finished=self._on_moxfield_decks,
-                                  on_failed=self._on_moxfield_failed)
+                run_in_background(lambda u=player.username: _fetch_decks(u),
+                                  self._bg_tasks, on_finished=self._on_moxfield_decks)
         unique, seen = [], set()
         for d in decks:
             if d.key not in seen:
@@ -296,16 +309,19 @@ class GameDialog(QDialog):
         box.blockSignals(False)
 
     def _on_moxfield_decks(self, result):
+        """A Moxfield player's deck list arrived — or couldn't be fetched
+        (decks None): then it's remembered as empty for this session, so
+        the dialog doesn't ask Moxfield again on every seat change (their
+        decks from earlier games, and typing a name, still work)."""
         username, decks = result
-        _moxfield_decks_cache[username.lower()] = decks
+        _moxfield_decks_cache[username.lower()] = decks or []
         self._fetching.discard(username.lower())
+        if decks is None:
+            return
         for row in self._rows:  # refresh every seat using this player's decks
             player = self.tracker.players.get(self._owner_id(row) or "")
             if player and player.kind == gt.MOXFIELD and player.username.lower() == username.lower():
                 self._fill_decks(row)
-
-    def _on_moxfield_failed(self, message: str):
-        self._fetching.clear()  # typing a deck name still works
 
     def _owner_id(self, row: _SeatRow) -> str | None:
         """Whose deck the row's player uses: the chosen owner, else themselves."""
