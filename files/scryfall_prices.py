@@ -1,12 +1,15 @@
 """Collection prices from Scryfall instead of Moxfield (Moxfield's lag a
 day or more behind — Scryfall updates once a day).
 
-refresh() runs after each Moxfield collection refresh (sync.py): it looks
-up every printing's prices with Scryfall's batch endpoint (75 cards per
-request, through scryfall.py's shared rate limiter — ~45 requests for a
-3,000+ printing collection) and saves them to cache/collection_prices.json.
-At most once a day: Scryfall only updates daily, so a second refresh the
-same day only looks up printings that are new since the last fetch.
+Prices are separate from the collection: the collection only changes when
+you refresh it from Moxfield or import an export, but prices are fetched
+on their own once a day — the app does it at startup (and at midnight if
+it's left open) whenever needs_daily_refresh(), or with Settings → Sync →
+Refresh prices. refresh() looks up every printing's prices with Scryfall's
+batch endpoint (75 cards per request, through scryfall.py's shared rate
+limiter — ~45 requests for a 3,000+ printing collection) and saves them to
+cache/collection_prices.json. A collection refresh / import then only asks
+for printings that are new (only_new), and a second run the same day too.
 
 apply() overlays the saved prices onto collection entries (models/
 collection.py calls it on every load), so the stats, sorting, card popup
@@ -38,19 +41,31 @@ def _to_float(value):
     return float(value) if value not in (None, "") else None
 
 
-def refresh(entries: list) -> str:
+def needs_daily_refresh() -> bool:
+    """True if the last full price fetch wasn't today (or never ran) —
+    the app then fetches prices on its own (MainWindow, at startup and
+    when the date changes while it's open)."""
+    return _load()["fetched"] != date.today().isoformat()
+
+
+def refresh(entries: list, only_new: bool = False) -> str:
     """Fetches Scryfall prices for the collection's printings — all of
-    them once a day, else only ones not fetched yet. Returns a short
-    summary for the sync log. Raises on network errors (the caller keeps
-    Moxfield's prices then)."""
+    them once a day, else only ones not fetched yet. only_new: just the
+    printings without a saved price (after a collection refresh / import
+    brought in new cards), leaving the daily full fetch to its schedule.
+    Returns a short summary for the sync log. Raises on network errors
+    (the collection keeps the prices it has then)."""
     today = date.today().isoformat()
     saved = _load()
     ids = {e["card"].get("scryfall_id") for e in entries} - {None, ""}
-    if saved["fetched"] == today:
+    fetched = today
+    if only_new or saved["fetched"] == today:
         todo = sorted(ids - saved["prices"].keys())
         if not todo:
-            return "already fetched today"
+            return "no new printings" if only_new and saved["fetched"] != today else "already fetched today"
         prices = saved["prices"]
+        if only_new and saved["fetched"]:
+            fetched = saved["fetched"]  # still due for the daily fetch
     else:
         todo = sorted(ids)
         prices = {}
@@ -59,7 +74,7 @@ def refresh(entries: list) -> str:
         p = card.get("prices") or {}
         prices[card["id"]] = {k: _to_float(p.get(k)) for k in PRICE_KEYS}
 
-    cache_io.write_json(paths.COLLECTION_PRICES_PATH, {"fetched": today, "prices": prices})
+    cache_io.write_json(paths.COLLECTION_PRICES_PATH, {"fetched": fetched, "prices": prices})
     requests_sent = -(-len(todo) // scryfall.COLLECTION_BATCH)  # ceil
     found = sum(1 for i in todo if i in prices)
     return f"{found}/{len(todo)} printings from Scryfall ({requests_sent} requests)"

@@ -6,9 +6,11 @@ screen: login, logout, cache-clear, Moxfield refresh, and rebuilding the
 data-snapshotting screens after any of those.
 """
 
+from pathlib import Path
+
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QMessageBox, QInputDialog,
+    QMainWindow, QWidget, QHBoxLayout, QStackedWidget, QMessageBox, QInputDialog, QFileDialog,
 )
 
 from app import MTGApp
@@ -31,6 +33,7 @@ from ui.background import run_in_background
 from ui.update_flow import UpdateFlow
 import clear_cache
 import paths
+import scryfall_prices
 import scryfall
 import session
 import sync
@@ -96,6 +99,9 @@ class MainWindow(QMainWindow):
         # settings screen isn't rebuilt, so this is connected once
         self.settings_screen.refresh_requested.connect(
             lambda: self._start_refresh(sync.refresh_all, "Settings", "settings_screen"))
+        self.settings_screen.refresh_prices_requested.connect(
+            lambda: self._start_refresh(sync.refresh_prices, "Settings", "settings_screen"))
+        self.settings_screen.import_collection_requested.connect(self._import_collection)
 
         # Cache clearing (settings screen)
         self.settings_screen.clear_cache_requested.connect(self._clear_cache)
@@ -139,6 +145,15 @@ class MainWindow(QMainWindow):
         self.sidebar.update_requested.connect(self.update_flow.offer)
         self.settings_screen.install_update_requested.connect(self.update_flow.offer)
         self.settings_screen.check_updates_requested.connect(lambda: self.update_flow.check(manual=True))
+        # Prices: from Scryfall once a day, on their own — the collection
+        # itself only changes when you refresh / import it. Checked shortly
+        # after startup, then every half hour (for a window left open overnight).
+        QTimer.singleShot(2000, self._daily_prices)
+        self._price_timer = QTimer(self)
+        self._price_timer.setInterval(30 * 60 * 1000)
+        self._price_timer.timeout.connect(self._daily_prices)
+        self._price_timer.start()
+
         if paths.FROZEN:
             QTimer.singleShot(1500, self.update_flow.report_last_update)  # did last time's update arrive?
             QTimer.singleShot(3000, self.update_flow.check)
@@ -293,19 +308,65 @@ class MainWindow(QMainWindow):
             on_failed=self._on_refresh_failed,
         )
 
-    def _on_refresh_finished(self, _result):
+    def _daily_prices(self):
+        """Fetches today's prices from Scryfall in the background if that
+        hasn't happened yet today (scryfall_prices.needs_daily_refresh) —
+        quietly: no message, a failure is only logged and tried again at
+        the next check. Skipped while logged out, without a collection, or
+        while another sync runs."""
+        user = self.app.user if self.app.is_logged_in else None
+        collection = user.collection if user is not None else None
+        if (collection is None or not collection.cards or self._refresh_in_progress
+                or not scryfall_prices.needs_daily_refresh()):
+            return
+        self._refresh_in_progress = True
+        self.settings_screen.set_refresh_enabled(False)
+        run_in_background(lambda: sync.refresh_prices(user, "Daily prices"), self._bg_tasks,
+                          on_finished=self._on_daily_prices_done, on_failed=self._on_daily_prices_failed)
+
+    def _on_daily_prices_done(self, _summary):
+        self._refresh_in_progress = False
+        self.settings_screen.set_refresh_enabled(True)
+        self._rebuild_data_screens()  # show the new prices
+
+    def _on_daily_prices_failed(self, _message):
+        self._refresh_in_progress = False  # (the error is in the session and sync logs)
+        self.settings_screen.set_refresh_enabled(True)
+
+    def _import_collection(self):
+        """Settings → Import collection (CSV)…: pick Moxfield's export
+        file, then import it in the background (sync.import_collection)."""
+        if not self.app.is_logged_in:
+            QMessageBox.information(self, "Not logged in", "Log in first via the sidebar avatar.")
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Moxfield collection export", str(Path.home() / "Downloads"), "CSV files (*.csv);;All files (*)")
+        if path:
+            self._start_refresh(lambda user, source: sync.import_collection(user, source, path),
+                                "Settings", "settings_screen")
+
+    def _on_refresh_finished(self, result):
         """Background-task callback: rebuilds the data screens to show
         the freshly-fetched data (the rebuilt screens come with their
-        refresh buttons enabled). _result is unused (jobs return None)."""
+        refresh buttons enabled). A job that returns a message (prices,
+        CSV import) has it shown."""
         self._refresh_in_progress = False
         self._rebuild_data_screens()
         self.settings_screen.set_refresh_enabled(True)  # not rebuilt, unlike the others
+        if isinstance(result, str) and result:
+            QMessageBox.information(self, "Done", result)
 
     def _on_refresh_failed(self, message: str):
         """Background-task callback: re-enables the refresh button and
-        surfaces the error. message: str(exception) from the failed fetch."""
+        surfaces the error. message: str(exception) from the failed fetch.
+        Moxfield refusing (403) gets a pointer to the CSV import."""
         self._refresh_in_progress = False
         getattr(self, self._refreshing_screen_attr).set_refresh_enabled(True)
+        if "403" in message and "moxfield" in message.lower():
+            message = ("Moxfield refused the request (403 Forbidden) — its API is blocking Upkeep "
+                       "right now.\n\nYou can still bring your collection in from a file: Settings → "
+                       "Import from Moxfield export. Prices can be updated on their own with Settings → "
+                       "Sync → Refresh prices.")
         QMessageBox.warning(self, "Refresh failed", message)
 
     def _on_login_requested(self):

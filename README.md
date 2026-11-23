@@ -113,7 +113,9 @@ Track game results for your playgroup.
 ### Settings
 - **Sync → Refresh all:**
   - Fetches your profile, collection and decks from Moxfield, plus collection prices from Scryfall.
+  - **Refresh prices** only asks Scryfall: your cards stay as last synced or imported. Prices also update on their own once a day (at startup, or at midnight if Upkeep is left open), so you rarely need it.
   - **View log** shows when each was last synced.
+- **Import from Moxfield export:** the backup for when Moxfield's API can't be reached. Export your collection on moxfield.com (Collection → Export → CSV) and import the file; quantities, foil, language and condition come from the file, card data and prices from Scryfall. Decks come in through Decks → Import deck, with a deck's text export.
 - **Cache:** clear the collection, decks, profile or images.
 - **Search syntax:** the full guide to the search filters.
 - **Custom card images:** use your own front and/or back image for a printing, such as an artist proof or a signed card.
@@ -134,10 +136,10 @@ The **downloaded app** keeps everything in `%APPDATA%\Upkeep`; **running from so
 To move from running the source to the downloaded app (or back), copy the `data/` folder across — the cache refills itself.
 
 ### Moxfield and Scryfall
-- **Moxfield:** your profile, collection and decks, plus other players' public deck lists for the Game Tracker. Data is fetched when you log in or refresh, and cached in between.
+- **Moxfield:** your profile, collection and decks, plus other players' public deck lists for the Game Tracker. Data is fetched only when you log in or refresh, and cached in between — never automatically. If Moxfield can't be reached, import its CSV export instead (Settings → Import from Moxfield export).
 - **Scryfall:**
-  - **Collection prices** are fetched at most once a day (about 45 batch requests for 3,000+ printings). Scryfall updates its prices daily, and Moxfield's prices can lag a day or more behind.
-  - **Card lookups** for purchases and deck imports use batch requests of 75 cards.
+  - **Collection prices** are separate from the collection: fetched automatically once a day, on the first start of a new day (about 45 batch requests for 3,000+ printings). Scryfall updates its prices daily, and Moxfield's prices can lag a day or more behind. Refreshing or importing the collection only fetches prices for cards that are new.
+  - **Card lookups** for purchases, deck imports and collection CSV imports use batch requests of 75 cards.
   - **Requests are throttled** to 3 per second across the whole app. Scryfall's limit is about 10.
   - **Card images** come from Scryfall's image servers, which aren't rate-limited like the API, and are cached on disk.
 

@@ -31,6 +31,8 @@ class SettingsScreen(QWidget):
     clear_cache_requested = Signal(list)  # list of strings: "collection", "decks", "profile", "images"
     proofs_changed = Signal()  # artist proofs added / changed / removed
     refresh_requested = Signal()  # "Refresh all" (Sync section): profile, collection, prices, decks
+    refresh_prices_requested = Signal()  # "Refresh prices" (Sync section): Scryfall only
+    import_collection_requested = Signal()  # "Import collection (CSV)…" (Moxfield export)
     check_updates_requested = Signal()  # Updates → Check for updates
     install_update_requested = Signal()  # Updates → Update to vX (shown once one is found)
 
@@ -67,7 +69,7 @@ class SettingsScreen(QWidget):
         title.setObjectName("screenTitle")
         outer.addWidget(title)
 
-        for section in (self._build_sync_log_section(), self._build_cache_section(),
+        for section in (self._build_sync_log_section(), self._build_import_section(), self._build_cache_section(),
                         self._build_search_help_section(), self._build_proofs_section(),
                         self._build_updates_section(), self._build_logs_section()):
             outer.addWidget(section)  # SectionCards: fixed height, the page scrolls
@@ -87,22 +89,40 @@ class SettingsScreen(QWidget):
         section = SectionCard(
             "Sync",
             "Refresh all fetches your profile, collection and decks from Moxfield, and your "
-            "collection's prices from Scryfall. The log shows when each was last synced.")
+            "collection's prices from Scryfall. Refresh prices only asks Scryfall — your cards "
+            "stay as last synced or imported. The log shows when each was last synced.")
         section.add_button("View log", self._show_log_page, secondary=True)
+        self._refresh_prices_btn = section.add_button("Refresh prices", self.refresh_prices_requested.emit,
+                                                      secondary=True)
         self._refresh_all_btn = section.add_button("Refresh all", self.refresh_requested.emit)
         self._update_refresh_button()
         return section
 
+    def _build_import_section(self) -> QWidget:
+        """The "Import from Moxfield export" card: the backup for when
+        Moxfield's API can't be reached."""
+        section = SectionCard(
+            "Import from Moxfield export",
+            "If refreshing from Moxfield fails, bring your collection in from a file instead: on "
+            "moxfield.com open your Collection → Export → CSV, then import that file here. Card "
+            "data and prices come from Scryfall. (Decks: Decks → Import deck, with a deck's "
+            "text export.)")
+        self._import_btn = section.add_button("Import collection (CSV)…", self.import_collection_requested.emit)
+        return section
+
     def set_refresh_enabled(self, enabled: bool):
-        """Toggles Refresh all between normal and "Refreshing…" (disabled)
-        — called by MainWindow around the background Moxfield fetch."""
+        """Toggles the Sync / import buttons between normal and busy
+        (disabled) — called by MainWindow around background syncs."""
         self._refreshing = not enabled
         self._update_refresh_button()
 
     def _update_refresh_button(self):
         """Disabled while logged out or refreshing. (This screen isn't
         rebuilt on login / logout, so it's re-checked whenever it's shown.)"""
-        self._refresh_all_btn.setEnabled(bool(self.app and self.app.is_logged_in) and not self._refreshing)
+        ready = bool(self.app and self.app.is_logged_in) and not self._refreshing
+        for button in (self._refresh_all_btn, self._refresh_prices_btn, getattr(self, "_import_btn", None)):
+            if button is not None:
+                button.setEnabled(ready)
         self._refresh_all_btn.setText("Refreshing…" if self._refreshing else "Refresh all")
 
     def showEvent(self, event):
