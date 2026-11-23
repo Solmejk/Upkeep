@@ -124,16 +124,19 @@ class TokenPrinterScreen(QWidget):
         preview_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         preview_scroll.setMinimumWidth(320)
         # the pages fill the preview column's width (within the preview's limits)
-        self._preview_scroll = preview_scroll
-        preview_scroll.viewport().installEventFilter(self)
+        self._preview_viewport = preview_scroll.viewport()
+        self._preview_viewport.installEventFilter(self)
         right.addWidget(preview_scroll, 1)
         content.addLayout(right, 1)
 
     def eventFilter(self, obj, event):
-        """Preview column resized: scale the pages to its width."""
-        if obj is self._preview_scroll.viewport() and event.type() == QEvent.Resize:
+        """Preview column resized: scale the pages to its width. Checks the
+        event type first and compares against the stored viewport rather
+        than asking Qt for it: while the app shuts down this still runs,
+        with the scroll area already deleted."""
+        if event.type() == QEvent.Resize and obj is self._preview_viewport:
             self._preview.set_page_width(event.size().width() - 4)
-        return super().eventFilter(obj, event)
+        return False  # never swallows the event
 
     # ------------------------------------------------------------ decks
     def showEvent(self, event):

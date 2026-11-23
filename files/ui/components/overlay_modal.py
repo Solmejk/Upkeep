@@ -24,6 +24,7 @@ class OverlayModal(QWidget):
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setObjectName("cardModal")  # dim-overlay background, shared QSS
         self._content = None
+        self._covered = parent  # the window followed in eventFilter
         self.hide()
         if parent is not None:
             parent.installEventFilter(self)  # follow the window's size (see eventFilter)
@@ -54,10 +55,13 @@ class OverlayModal(QWidget):
         self.closed.emit()
 
     def eventFilter(self, obj, event):
-        """While shown, keeps covering the window as it's resized."""
-        if obj is self.parent() and event.type() == QEvent.Resize and self.isVisible():
+        """While shown, keeps covering the window as it's resized. Checks
+        the event type first and compares against the stored window rather
+        than asking Qt for parent(): while the app shuts down this still
+        runs, with widgets already deleted."""
+        if event.type() == QEvent.Resize and obj is self._covered and self.isVisible():
             self.resize(event.size())
-        return super().eventFilter(obj, event)
+        return False  # never swallows the event
 
     def mousePressEvent(self, event):
         """Clicking outside the content box dismisses the overlay;
