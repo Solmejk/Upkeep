@@ -65,5 +65,17 @@ def test_latest_release_without_releases_is_none(monkeypatch):
     assert updater.latest_release() is None
 
 
+def test_the_installer_gets_no_pyinstaller_variables(monkeypatch):
+    """Inherited, they make the relaunched Upkeep load Python from the old
+    copy's deleted temp folder ("Failed to load Python DLL")."""
+    monkeypatch.setenv("_PYI_APPLICATION_HOME_DIR", r"C:\Temp\_MEI1234")
+    monkeypatch.setenv("_PYI_PARENT_PROCESS_LEVEL", "1")
+    monkeypatch.setenv("_MEIPASS2", r"C:\Temp\_MEI1234")
+    env = updater.clean_environment()
+    assert not [k for k in env if k.startswith(("_PYI_", "_MEIPASS"))]
+    assert env["PYINSTALLER_RESET_ENVIRONMENT"] == "1"
+    assert "PATH" in env or "Path" in env  # everything else is kept
+
+
 def test_a_source_run_cannot_update_itself():
     assert not updater.can_self_update()  # tests run from source: no installed .exe to replace

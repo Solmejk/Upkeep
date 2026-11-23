@@ -15,6 +15,7 @@ Publishing a release (git tag vX.Y.Z + push) is what makes an update
 appear — see .github/workflows/release.yml.
 """
 
+import os
 import re
 import subprocess
 import sys
@@ -131,10 +132,25 @@ def clean_downloads():
             pass
 
 
+def clean_environment() -> dict:
+    """This process's environment minus PyInstaller's own variables, for
+    starting other programs. The one-file Upkeep.exe records its temporary
+    unpack folder (_MEI…) in them; a new Upkeep started with them inherited
+    (by the Setup, after an update) takes itself for part of the old one
+    and loads Python from that folder — deleted as the old one quits —
+    and fails with "Failed to load Python DLL". PYINSTALLER_RESET_ENVIRONMENT
+    is PyInstaller's switch for exactly this."""
+    env = {k: v for k, v in os.environ.items()
+           if not (k.startswith("_PYI_") or k.startswith("_MEIPASS"))}
+    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    return env
+
+
 def run_installer(setup: Path):
     """Starts the Setup silently (a small progress window, no questions)
     and detached, so it outlives Upkeep. The caller then quits; the Setup
-    replaces the program and starts the new version."""
+    replaces the program and starts the new version — with a clean
+    environment (see clean_environment)."""
     flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
     subprocess.Popen([str(setup), "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS"],
-                     creationflags=flags, close_fds=True)
+                     creationflags=flags, close_fds=True, env=clean_environment())
