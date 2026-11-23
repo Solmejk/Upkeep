@@ -4,6 +4,8 @@ without freezing the UI. See BackgroundTask's docstring for the
 autoDelete/use-after-free pitfall this exists to avoid.
 """
 
+import traceback
+
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
 
 
@@ -38,6 +40,9 @@ class BackgroundTask(QRunnable):
         try:
             result = self.fn()
         except Exception as e:
+            # the UI only gets the message; the full traceback goes to stderr,
+            # so it's in the session log (session_log.py)
+            traceback.print_exc()
             self.signals.failed.emit(str(e))
         else:
             self.signals.finished.emit(result)

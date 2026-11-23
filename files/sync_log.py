@@ -6,6 +6,7 @@ Settings screen's Sync log page. One line per sync step, newest last:
 Not touched by clear_cache (it only removes the data caches).
 """
 
+import sys
 import time
 from datetime import datetime
 
@@ -54,6 +55,9 @@ def _append(kind, source, username, status, seconds, details):
         f"{timestamp} | {kind:<10} | {source:<15} | {username} | "
         f"{status:<6} | {seconds:5.1f}s | {details}"
     )
+    # also in the session log (session_log.py) — on stderr if it failed
+    print(f"sync {status.lower()}: {kind} ({source}, {username}) {seconds:.1f}s — {details}",
+          file=sys.stderr if status == "FAILED" else sys.stdout)
     lines = (read_lines() + [line])[-MAX_LINES:]
     paths.SYNC_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(paths.SYNC_LOG_PATH, "w", encoding="utf-8") as f:
