@@ -5,13 +5,15 @@ on), a Sync log sub-page showing when Moxfield was last synced
 guide in ui/search_help.py), and an Updates card (ui/update_flow.py).
 """
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QUrl, Signal
+from PySide6.QtGui import QDesktopServices
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QStackedWidget, QPlainTextEdit, QTextBrowser, QScrollArea,
 )
 
+import paths
 import sync_log
 from ui.components.section_card import SectionCard, back_button
 from ui.components.artist_proofs_panel import ArtistProofsPanel
@@ -67,7 +69,7 @@ class SettingsScreen(QWidget):
 
         for section in (self._build_sync_log_section(), self._build_cache_section(),
                         self._build_search_help_section(), self._build_proofs_section(),
-                        self._build_updates_section()):
+                        self._build_updates_section(), self._build_logs_section()):
             outer.addWidget(section)  # SectionCards: fixed height, the page scrolls
 
         outer.addStretch()
@@ -106,6 +108,16 @@ class SettingsScreen(QWidget):
     def showEvent(self, event):
         super().showEvent(event)
         self._update_refresh_button()
+
+    def _build_logs_section(self) -> QWidget:
+        """The "Logs" card: where session_log.py writes, and a button to
+        open that folder."""
+        section = SectionCard(
+            "Logs",
+            "Everything Upkeep reports while it runs — messages, errors, crashes — is written to "
+            "current.log (this session) and previous.log (the one before). Handy when something goes wrong.")
+        section.add_button("Open log folder", lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(paths.LOGS_DIR))))
+        return section
 
     def _build_updates_section(self) -> QWidget:
         """The "Updates" card: this version, the last check's result, and

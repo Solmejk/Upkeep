@@ -16,6 +16,7 @@ files/cache/*
 files/data/
 
 # --- Logs -----------------------------------------------------------------
+files/logs/
 *.log
 files/self_test.txt
 

@@ -129,6 +129,7 @@ The **downloaded app** keeps everything in `%APPDATA%\Upkeep`; **running from so
 |---|---|---|
 | `cache/` | Moxfield data, card images, Scryfall prices, the sync log | Yes, everything except the sync log, by category |
 | `data/` | Things you made: local decks, showcases, custom card images, purchases, the game tracker, value and price history, default token printings | **Never** |
+| `logs/` | `current.log` (this session) and `previous.log` (the one before): everything the app prints, errors and crash tracebacks, timestamped. Settings → Logs → Open log folder | No — each start replaces `previous.log` |
 
 To move from running the source to the downloaded app (or back), copy the `data/` folder across — the cache refills itself.
 

@@ -3,6 +3,13 @@ QMainWindow, QWidget {
     color: #e8e8e8;
     font-size: 13px;
 }
+/* Dropdowns (and their popup lists) in pt, not px: with a px-only font
+   QFont.pointSize() is -1, and QComboBox reuses it internally — Qt then
+   warns "QFont::setPointSize: Point size <= 0". 10pt ≈ 13px. (Same issue
+   as QToolButton below.) */
+QComboBox, QComboBox QAbstractItemView {
+    font-size: 10pt;
+}
 
 /* Sidebar container + all its children share this background */
 QWidget#sidebar,

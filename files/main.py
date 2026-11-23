@@ -1,27 +1,14 @@
-"""Entry point for the GUI app. Sets up crash logging, builds the
+"""Entry point for the GUI app. Starts the session log, builds the
 QApplication and MainWindow, and wires up a clean-shutdown handler so
 background image/deck-load threads don't get torn down mid-flight. Run
 this file directly to launch the app (add --self-test to check a build
 instead — see self_test.py).
 """
 
-import faulthandler
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QThreadPool
-from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication
-
 import paths
-import session
-from app import MTGApp
-from ui.main_window import MainWindow
-
-# your folder (files/ from source, %APPDATA% for the .exe) — see paths.py
-paths.USER_ROOT.mkdir(parents=True, exist_ok=True)
-_crash_log = open(paths.CRASH_LOG_PATH, "w")
-faulthandler.enable(file=_crash_log)
 
 
 def load_stylesheet(path: Path) -> str:
@@ -34,6 +21,16 @@ def main():
     """Builds and runs the application: loads the last-logged-in user (if
     any) from session.py, creates the QApplication/MainWindow, and blocks
     until the window closes."""
+    # imported here, after the session log has started, so anything that
+    # goes wrong while the app's modules load is in the log too
+    from PySide6.QtCore import QThreadPool
+    from PySide6.QtGui import QIcon
+    from PySide6.QtWidgets import QApplication
+
+    import session
+    from app import MTGApp
+    from ui.main_window import MainWindow
+
     mtg_app = MTGApp(session.get_saved_username())
     # No eager deck.load() — each deck loads on demand when its detail screen opens
 
@@ -62,4 +59,8 @@ if __name__ == "__main__":
     if "--self-test" in sys.argv:  # check a build without opening a window — see self_test.py
         import self_test
         sys.exit(self_test.run())
+    # your folder (files/ from source, %APPDATA% for the .exe) — see paths.py
+    paths.USER_ROOT.mkdir(parents=True, exist_ok=True)
+    import session_log
+    session_log.start()  # logs/current.log (+ previous.log) — see session_log.py
     main()

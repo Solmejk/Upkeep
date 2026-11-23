@@ -8,7 +8,7 @@ Two kinds of files:
     Bundled, read-only (RESOURCE_ROOT): the icons and the stylesheet. From
         source that's files/; in the packaged .exe (PyInstaller) it's the
         folder the .exe unpacks itself into (sys._MEIPASS).
-    Yours, writable (USER_ROOT): the cache, your data and the crash log.
+    Yours, writable (USER_ROOT): the cache, your data and the session logs.
         From source that's files/ as before; in the packaged .exe it's
         %APPDATA%/Upkeep — the .exe's own folder is
         temporary, so nothing there would survive a restart.
@@ -38,7 +38,7 @@ ASSETS_DIR = RESOURCE_ROOT / "assets"
 STYLE_PATH = RESOURCE_ROOT / "ui" / "style.qss"
 APP_ICON_PATH = ASSETS_DIR / "app_icon.png"
 
-CRASH_LOG_PATH = USER_ROOT / "crash.log"
+LOGS_DIR = USER_ROOT / "logs"  # this session's and the last one's — see session_log.py
 CACHE_DIR = USER_ROOT / "cache"
 IMAGES_DIR = CACHE_DIR / "images"
 DECKS_DIR = CACHE_DIR / "decks"
