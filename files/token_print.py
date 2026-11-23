@@ -1,6 +1,6 @@
 """Token print sheets: a Word document (.docx) with N copies of each token
 image, ready to print and cut — ported from the standalone TokenPrinter
-(Mac/tkinter) script, on A4: images turned 90°, 88 mm wide (= a card's
+(Mac/tkinter) script, on A4: images turned 90°, 88.9 mm wide (= a card's
 height, so each prints at real card size), two per row, four rows = 8
 tokens per page. Images are Scryfall's full-size PNGs (745x1040, ~300 dpi
 at card size), downloaded once into the image cache.
@@ -23,8 +23,10 @@ from PIL import Image, ImageDraw
 import scryfall
 from image_cache import get_original_image_path
 
-IMAGE_WIDTH_MM = 88   # the rotated card's width = a card's 88 mm height
-IMAGE_HEIGHT_MM = 63  # ... and its height = a card's 63 mm width
+# A real Magic card is 2.5 x 3.5 inches = 63.5 x 88.9 mm (not the rounded
+# 63 x 88 often quoted — that prints about 1 % small next to a real card).
+IMAGE_WIDTH_MM = 88.9   # the rotated card's width = a card's 3.5 in height
+IMAGE_HEIGHT_MM = 63.5  # ... and its height = a card's 2.5 in width
 PER_ROW = 2
 ROWS_PER_PAGE = 4
 PER_PAGE = PER_ROW * ROWS_PER_PAGE  # 8

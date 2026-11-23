@@ -106,7 +106,7 @@ Track game results for your playgroup.
   - If Cardmarket's `ArticlesFromShipment<order>.csv` is in the same folder as the PDF, card and foil counts are checked against it.
 - **Token Printer:**
   - Pick a deck and how many copies of each token you want (2 by default).
-  - You get an A4 Word document with the tokens at real card size (88 × 63 mm), two per row, using full-resolution Scryfall images and your default token printings.
+  - You get an A4 Word document with the tokens at real card size (63.5 × 88.9 mm, turned sideways), two per row, with square corners and crop marks, using full-resolution Scryfall images and your default token printings.
   - A page preview shows exactly how it will print. Print at 100% ("Actual size").
 - **Availability Checker:** paste any Moxfield deck link to see which cards you own and have free, which are already in another active deck, and which you're missing. Missing cards are priced, and the result can be exported.
 
