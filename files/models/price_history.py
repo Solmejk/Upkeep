@@ -12,6 +12,8 @@ missing from older rows). About 12 bytes per printing per day — roughly
 14 MB a year for a 3,000-printing collection refreshed daily.
 """
 
+from datetime import date, timedelta
+
 import cache_io
 import paths
 import scryfall_prices
@@ -86,13 +88,41 @@ def series(scryfall_id: str, foil: bool) -> list:
 
 PERCENT_MIN_EUR = 1.0  # the % ranking only counts cards worth this much (before or after)
 
+# Movers' periods: key -> (label, days back; None = the previous update,
+# "all" = the first recorded day)
+PERIODS = {
+    "last": ("Last update", None),
+    "week": ("Last week", 7),
+    "month": ("Last month", 30),
+    "year": ("Last year", 365),
+    "all": ("All time", "all"),
+}
 
-def movers(tiles: list):
-    """Biggest risers and fallers between the last two recorded days among
-    collection tiles (merged entries: one per printing + finish), ranked
-    two ways. Returns None if fewer than two days are recorded, else
 
-        {"previous_day": "YYYY-MM-DD",
+def comparison_day(period: str, recorded: list) -> str | None:
+    """The recorded day a period compares the latest one with: the
+    previous update, the last day at least N days back (the oldest day if
+    history doesn't reach that far yet), or the first day. None if there's
+    only one day."""
+    if len(recorded) < 2:
+        return None
+    back = PERIODS.get(period, PERIODS["last"])[1]
+    if back is None:
+        return recorded[-2]
+    if back == "all":
+        return recorded[0]
+    target = (date.fromisoformat(recorded[-1]) - timedelta(days=back)).isoformat()
+    earlier = [d for d in recorded[:-1] if d <= target]
+    return earlier[-1] if earlier else recorded[0]
+
+
+def movers(tiles: list, period: str = "last"):
+    """Biggest risers and fallers among collection tiles (merged entries:
+    one per printing + finish) between the latest recorded day and the
+    period's comparison_day, ranked two ways. Returns None if fewer than
+    two days are recorded, else
+
+        {"previous_day": "YYYY-MM-DD",    # the day compared with
          "by_value":   (riser, faller),   # biggest change in € per copy
          "by_percent": (riser, faller)}   # biggest change in %, cards
                                           # worth PERCENT_MIN_EUR+ only —
@@ -100,11 +130,14 @@ def movers(tiles: list):
                                           # €0.05 is +150 %)
 
     each mover a (tile, old, new) tuple, or None if nothing went that way.
-    The same card can top both rankings."""
+    A card without a price on the comparison day (added later) is measured
+    from its first recorded price. The same card can top both rankings."""
     recorded = days()
-    if len(recorded) < 2:
+    prev_day = comparison_day(period, recorded)
+    if prev_day is None:
         return None
-    prev_day, last_day = recorded[-2], recorded[-1]
+    last_day = recorded[-1]
+    later_days = recorded[recorded.index(prev_day) + 1:-1]  # for cards added after prev_day
     best = {"value_up": None, "value_down": None, "pct_up": None, "pct_down": None}
     score = {k: 0.0 for k in best}
 
@@ -118,6 +151,8 @@ def movers(tiles: list):
             continue
         foil = bool(tile.get("isFoil")) or str(tile.get("finish", "")).lower() in ("foil", "etched")
         old, new = price_on(prev_day, sid, foil), price_on(last_day, sid, foil)
+        if old is None and new is not None:  # added since: from its first price
+            old = next((p for p in (price_on(d, sid, foil) for d in later_days) if p is not None), None)
         if old is None or new is None or new == old:
             continue
         mover, diff = (tile, old, new), new - old

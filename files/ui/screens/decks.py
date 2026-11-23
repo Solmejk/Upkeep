@@ -17,6 +17,7 @@ from card_sort import name_key
 from models.deck import SOURCE_MOXFIELD
 from card_fields import plural
 from ui.components.toggle_switch import ToggleSwitch
+from ui.components.sticky_page import StickyHeaderPage
 
 
 # Caption badge per deck source: (letter, color) shown before the deck
@@ -50,6 +51,12 @@ class DecksScreen(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
+        # everything above the decks: stays put in a big window, scrolls
+        # away otherwise (StickyHeaderPage, added at the end)
+        top = QWidget()
+        top_part = QVBoxLayout(top)
+        top_part.setContentsMargins(0, 0, 0, 0)
+        top_part.setSpacing(0)
 
         # Top bar: title + filter toggles
         top_bar = QWidget()
@@ -91,7 +98,7 @@ class DecksScreen(QWidget):
         self._refresh_btn.clicked.connect(self.refresh_requested.emit)
         top_layout.addWidget(self._refresh_btn)
 
-        outer.addWidget(top_bar)
+        top_part.addWidget(top_bar)
 
         # Search by deck name (plain text — not the card search syntax)
         search_row = QWidget()
@@ -108,7 +115,7 @@ class DecksScreen(QWidget):
         self._search.setFixedWidth(340)
         self._search.textChanged.connect(self._on_search_changed)
         search_layout.addWidget(self._search)
-        outer.addWidget(search_row)
+        top_part.addWidget(search_row)
 
         # Scrollable grid
         scroll = QScrollArea()
@@ -121,7 +128,7 @@ class DecksScreen(QWidget):
         self._grid_container.setContentsMargins(40, 0, 40, 40)
 
         scroll.setWidget(self._grid_container)
-        outer.addWidget(scroll, 1)
+        outer.addWidget(StickyHeaderPage(top, scroll), 1)
 
         self.rebuild_grid()
 

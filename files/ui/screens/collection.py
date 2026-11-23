@@ -20,8 +20,10 @@ from ui.components.card_grid_view import CardGridView
 from ui.components.color_pie import ColorPie, ColorLegend
 from ui.components.value_chart import ValueChart
 from ui.components.movers_panel import MoversPanel
+from ui.components.sticky_page import StickyHeaderPage
 
-MOVERS_SIDE_BY_SIDE_FROM = 1400  # screen width (px) from which the movers' two groups sit side by side
+MOVERS_SIDE_BY_SIDE_FROM = 1500  # screen width (px) from which the movers' two groups sit side by side
+                                 # (below it they stack, so the value chart keeps ~430 px)
 from ui.components.card_grid_view import entry_payload
 from ui.components.search_box import SearchBox
 
@@ -68,6 +70,12 @@ class CollectionScreen(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
+        # everything above the grid: stays put in a big window, scrolls
+        # away otherwise (StickyHeaderPage, added at the end)
+        top = QWidget()
+        top_layout = QVBoxLayout(top)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setSpacing(0)
 
         # Header: title + refresh button
         header_row = QWidget()
@@ -86,7 +94,7 @@ class CollectionScreen(QWidget):
         header_layout.addWidget(self._refresh_btn)
         self._header_layout = header_layout  # embedders may add buttons (see PurchasesScreen)
 
-        outer.addWidget(header_row)
+        top_layout.addWidget(header_row)
 
         # Stats column: text on top, pie + legend below
         stats_column = QWidget()
@@ -127,7 +135,7 @@ class CollectionScreen(QWidget):
 
             # Biggest riser / faller since the previous price day
             chart_layout.addSpacing(16)
-            movers = MoversPanel(price_history.movers(merge_languages(self._cards)))
+            movers = MoversPanel(merge_languages(self._cards))
             movers.tile_clicked.connect(lambda tile: self._on_card_clicked(entry_payload(tile)))
             chart_layout.addWidget(movers)
             self._movers = movers  # stacked in narrow windows — see resizeEvent
@@ -137,7 +145,7 @@ class CollectionScreen(QWidget):
             chart_layout.addStretch()  # keep pie + legend left-aligned
 
         stats_layout.addWidget(chart_block)
-        outer.addWidget(stats_column)
+        top_layout.addWidget(stats_column)
 
         # Search bar — right-aligned (Scryfall syntax, see card_search)
         search_row = QWidget()
@@ -156,7 +164,7 @@ class CollectionScreen(QWidget):
         search_layout.addSpacing(8)
         search_layout.addWidget(self._sort_btn)
 
-        outer.addWidget(search_row)
+        top_layout.addWidget(search_row)
 
         # Card grid (virtualized)
         self._grid = CardGridView()
@@ -166,7 +174,8 @@ class CollectionScreen(QWidget):
         self._grid.setCardData(card_sort.sort_entries(self._merged_cards, self._sort_mode))
         self._grid.card_clicked.connect(self._on_card_clicked)
         self._grid.entry_menu_requested.connect(self.entry_menu_requested.emit)
-        outer.addWidget(self._grid, 1)
+        self._page = StickyHeaderPage(top, self._grid)
+        outer.addWidget(self._page, 1)
 
         self._render_stats()
 
@@ -192,7 +201,7 @@ class CollectionScreen(QWidget):
 
     def resizeEvent(self, event):
         """Narrow windows: the biggest movers' two groups stack, so the
-        charts row still fits (side by side it needs ~1300 px)."""
+        charts row still fits (side by side it needs ~1350 px)."""
         super().resizeEvent(event)
         if self._movers is not None:
             self._movers.set_stacked(event.size().width() < MOVERS_SIDE_BY_SIDE_FROM)

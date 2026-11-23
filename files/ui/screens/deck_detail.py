@@ -24,6 +24,7 @@ from ui.theme import elo_color
 from ui.components.language_check_dialog import LanguageCheckDialog
 from ui.components.search_box import SearchBox
 from ui.components.toggle_switch import ToggleSwitch
+from ui.components.sticky_page import StickyHeaderPage
 
 
 class DeckDetailScreen(QWidget):
@@ -53,6 +54,12 @@ class DeckDetailScreen(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
+        # everything above the card sections: stays put in a big window,
+        # scrolls away otherwise (StickyHeaderPage, added at the end)
+        top = QWidget()
+        top_part = QVBoxLayout(top)
+        top_part.setContentsMargins(0, 0, 0, 0)
+        top_part.setSpacing(0)
 
         # Top bar (back button)
         top_bar = QHBoxLayout()
@@ -66,7 +73,7 @@ class DeckDetailScreen(QWidget):
         self._search = SearchBox("Search this deck… e.g. t:creature mv<=2", context_fn=self._search_context)
         self._search.search_changed.connect(self._on_search_changed)
         top_bar.addWidget(self._search)
-        outer.addLayout(top_bar)
+        top_part.addLayout(top_bar)
 
         # Header (name + value on left, active toggle on right)
         header = QWidget()
@@ -141,7 +148,7 @@ class DeckDetailScreen(QWidget):
 
         header_layout.addWidget(toggle_row)
 
-        outer.addWidget(header)
+        top_part.addWidget(header)
 
         # Stats row: mana curve, color balance, mana production (shared with
         # the Deck Maker's card preview)
@@ -150,7 +157,7 @@ class DeckDetailScreen(QWidget):
         self._elo_block = DeckEloBlock()  # Game Tracker Elo, first in the stats row
         self._elo_block.clicked.connect(self.tracker_deck_clicked.emit)
         self._stats_row.insert_first(self._elo_block)
-        outer.addWidget(self._stats_row)
+        top_part.addWidget(self._stats_row)
 
         # Scrollable card sections
         scroll = QScrollArea()
@@ -165,7 +172,8 @@ class DeckDetailScreen(QWidget):
         self._sections_layout.setAlignment(Qt.AlignTop)
 
         scroll.setWidget(self._sections_container)
-        outer.addWidget(scroll, 1)
+        self._page = StickyHeaderPage(top, scroll)
+        outer.addWidget(self._page, 1)
 
     def show_deck(self, deck):
         """Swaps the screen to show `deck`: updates the header/toggle and
@@ -174,6 +182,7 @@ class DeckDetailScreen(QWidget):
         self.deck = deck
         self._search.clear()
         self._search_predicate = None
+        self._page.verticalScrollBar().setValue(0)  # a new deck starts at the top (header showing)
         self.title_label.setText(deck.name)
         self.value_label.setText(f"€{deck.value:.2f}")
         self._avg_mv_label.setText(average_text(deck.cards))

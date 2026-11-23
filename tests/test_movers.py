@@ -48,6 +48,37 @@ def test_nothing_moved(history):
     assert result["by_value"] == (None, None) and result["by_percent"] == (None, None)
 
 
+DAYS = ["2025-11-01", "2026-10-20", "2026-11-14", "2026-11-20", "2026-11-22"]
+
+
+@pytest.mark.parametrize("period, expected", [
+    ("last", "2026-11-20"),   # the previous update
+    ("week", "2026-11-14"),   # last day at least 7 days before 11-22
+    ("month", "2026-10-20"),  # ... at least 30 days before
+    ("year", "2025-11-01"),   # ... at least 365 days before
+    ("all", "2025-11-01"),    # the first day
+])
+def test_each_period_compares_with_the_right_day(period, expected):
+    assert price_history.comparison_day(period, DAYS) == expected
+
+
+def test_a_period_longer_than_the_history_uses_its_first_day():
+    assert price_history.comparison_day("year", ["2026-11-20", "2026-11-22"]) == "2026-11-20"
+    assert price_history.comparison_day("week", ["2026-11-22"]) is None
+
+
+def test_a_card_added_later_counts_from_its_first_price(monkeypatch):
+    series = {"old": {"2026-11-01": 10.0, "2026-11-20": 12.0, "2026-11-22": 13.0},
+              "new": {"2026-11-20": 2.0, "2026-11-22": 6.0}}  # no price on 11-01
+    monkeypatch.setattr(price_history, "days", lambda: ["2026-11-01", "2026-11-20", "2026-11-22"])
+    monkeypatch.setattr(price_history, "price_on", lambda day, sid, foil: series[sid].get(day))
+    result = price_history.movers(tiles("old", "new"), "all")
+    assert result["previous_day"] == "2026-11-01"
+    riser = result["by_percent"][0]
+    assert name(riser) == "new" and (riser[1], riser[2]) == (2.0, 6.0)  # from 11-20, its first price
+    assert name(result["by_value"][0]) == "new"  # +€4 vs "old"'s +€3
+
+
 def test_needs_two_price_days(monkeypatch):
     monkeypatch.setattr(price_history, "days", lambda: ["2026-11-22"])
     assert price_history.movers(tiles("big_rise")) is None
