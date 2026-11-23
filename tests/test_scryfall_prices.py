@@ -24,9 +24,12 @@ def asked(monkeypatch):
     """Every id Scryfall was asked for; each card costs 1.00 EUR."""
     ids = []
 
-    def fake(identifiers):
+    def fake(identifiers, on_batch=None):
         ids.extend(i["id"] for i in identifiers)
-        return [{"id": i["id"], "prices": {"eur": "1.00"}} for i in identifiers]
+        cards = [{"id": i["id"], "prices": {"eur": "1.00"}} for i in identifiers]
+        if on_batch:
+            on_batch(cards)
+        return cards
     monkeypatch.setattr(scryfall_prices.scryfall, "cards_collection", fake)
     return ids
 
@@ -57,6 +60,31 @@ def test_daily_fetch_asks_for_everything_once_a_day(prices_file, asked):
     asked.clear()
     assert scryfall_prices.refresh(entries("a", "b", "c")) == "already fetched today"
     assert asked == []
+
+
+def test_a_daily_fetch_cut_short_keeps_its_batches_and_resumes(prices_file, monkeypatch):
+    save("2000-01-01", ["a", "b", "c"])
+    asked = []
+
+    def first_batch_then_429(identifiers, on_batch=None):
+        asked.append([i["id"] for i in identifiers])
+        on_batch([{"id": "a", "prices": {"eur": "2.00"}}])  # one batch arrives...
+        raise RuntimeError("429 Too Many Requests")          # ...then Scryfall refuses
+    monkeypatch.setattr(scryfall_prices.scryfall, "cards_collection", first_batch_then_429)
+    with pytest.raises(RuntimeError):
+        scryfall_prices.refresh(entries("a", "b", "c"))
+    kept = scryfall_prices.saved()
+    assert kept["prices"]["a"]["eur"] == 2.0      # today's price kept
+    assert kept["prices"]["b"] == {"eur": 0.5}    # yesterday's still there meanwhile
+    assert scryfall_prices.needs_daily_refresh()  # still due
+
+    def rest(identifiers, on_batch=None):
+        asked.append([i["id"] for i in identifiers])
+        on_batch([{"id": i["id"], "prices": {"eur": "3.00"}} for i in identifiers])
+    monkeypatch.setattr(scryfall_prices.scryfall, "cards_collection", rest)
+    scryfall_prices.refresh(entries("a", "b", "c"))
+    assert asked[-1] == ["b", "c"]                # resumed: "a" isn't asked again
+    assert not scryfall_prices.needs_daily_refresh()
 
 
 def test_new_cards_only_fetch_just_those_and_keep_the_daily_fetch_due(prices_file, asked):

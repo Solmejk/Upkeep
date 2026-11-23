@@ -1,6 +1,7 @@
 """Scryfall image URL / cache-key / pricing helpers, shared across the
 collection grid, deck detail, card modal, and availability check."""
 
+import sys
 import threading
 import time
 
@@ -48,7 +49,11 @@ class _RateLimiter:
             time.sleep(delay)
 
 
-_rate_limiter = _RateLimiter(max_per_second=3)
+# 2 per second: Scryfall refused (429) a ~45-request price fetch at 3 per
+# second, so stay well under — its card search / collection endpoints are
+# stricter than the API in general. Every request also backs off after a
+# 429 (_send).
+_rate_limiter = _RateLimiter(max_per_second=2)
 BATCH_SIZE = 15  # names per Scryfall query, combined with "or" — see cheapest_prices_eur
 
 
@@ -99,7 +104,7 @@ def search(query: str, unique: str = "cards", order: str | None = None, directio
     max_pages: stop after this many pages (175 cards each; None = all).
 
     Every request goes through the shared rate limiter; a 429 ("too many
-    requests") backs off once and retries. No matches -> []. Other
+    requests") backs off and retries (_send). No matches -> []. Other
     failures raise — unless quiet, which returns what was found so far
     (used where a missing result is acceptable, e.g. price lookups)."""
     params = {"q": query, "unique": unique}
@@ -126,16 +131,49 @@ def search(query: str, unique: str = "cards", order: str | None = None, directio
     return results
 
 
+API_ROOT = "https://api.scryfall.com/"
+
+
 def _get(url: str, params: dict | None, timeout: int):
-    """A rate-limited GET to the Scryfall API, retrying once after a 429
-    (a burst can trip the limit even under our own throttle)."""
-    for attempt in range(2):
+    """A rate-limited GET to the Scryfall API (see _send)."""
+    return _send("GET", url, params=params, timeout=timeout)
+
+
+def api_get(url: str, timeout: int = 10):
+    """A GET to any Scryfall API URL (e.g. /cards/named?format=image from
+    image_cache), paced and backed off like every other API request."""
+    return _send("GET", url, timeout=timeout)
+
+
+BACKOFF = (5, 15, 30)  # seconds to wait after each 429 in a row, unless Scryfall says how long
+_pause_lock = threading.Lock()
+_paused_until = 0.0  # after a 429, every request (any thread) waits until then
+
+
+def _send(method: str, url: str, **kwargs):
+    """Every Scryfall API request goes through here: the shared rate
+    limiter, and after a 429 ("too many requests") a pause before trying
+    again — as long as Scryfall's Retry-After says, else BACKOFF — that
+    holds back every other Scryfall request in the app too, instead of
+    them piling on. Returns the response (still a 429 if Scryfall kept
+    refusing; the caller's raise_for_status reports it)."""
+    global _paused_until
+    for attempt in range(len(BACKOFF) + 1):
+        with _pause_lock:
+            pause = _paused_until - time.monotonic()
+        if pause > 0:
+            time.sleep(pause)
         _rate_limiter.wait()
-        response = requests.get(url, params=params, headers=HEADERS, timeout=timeout)
-        if response.status_code == 429 and attempt == 0:
-            time.sleep(5)  # back off well past the momentary burst
-            continue
-        return response
+        response = requests.request(method, url, headers=HEADERS, **kwargs)
+        if response.status_code != 429 or attempt == len(BACKOFF):
+            return response
+        try:
+            wait = max(1.0, float(response.headers.get("Retry-After", "")))
+        except ValueError:
+            wait = BACKOFF[attempt]
+        with _pause_lock:
+            _paused_until = max(_paused_until, time.monotonic() + wait)
+        print(f"Scryfall: too many requests (429) — waiting {wait:.0f}s before retrying", file=sys.stderr)
     return response
 
 
@@ -176,29 +214,26 @@ COLLECTION_URL = "https://api.scryfall.com/cards/collection"
 COLLECTION_BATCH = 75  # Scryfall's max identifiers per /cards/collection request
 
 
-def cards_collection(identifiers: list[dict]) -> list[dict]:
+def cards_collection(identifiers: list[dict], on_batch=None) -> list[dict]:
     """Looks up many specific cards at once via Scryfall's
     /cards/collection endpoint (75 identifiers per request, rate-limited
     like every other call here). identifiers: Scryfall identifier dicts,
     e.g. {"set": "khm", "collector_number": "12"}, {"name": "Opt",
     "set": "xln"} or {"name": "Opt"}. Returns the found card objects (in
     no guaranteed relation to the input — match them up by set/number or
-    name). Raises on network errors, so a failed lookup isn't mistaken
-    for "card doesn't exist"."""
+    name). on_batch(cards): called with each batch's cards as they
+    arrive, so a caller can keep what it got if a later batch fails.
+    Raises on network errors, so a failed lookup isn't mistaken for
+    "card doesn't exist"."""
     found = []
     for i in range(0, len(identifiers), COLLECTION_BATCH):
         batch = identifiers[i:i + COLLECTION_BATCH]
-        for attempt in range(2):
-            _rate_limiter.wait()
-            response = requests.post(
-                COLLECTION_URL, json={"identifiers": batch}, headers=HEADERS, timeout=30,
-            )
-            if response.status_code == 429 and attempt == 0:
-                time.sleep(5)
-                continue
-            response.raise_for_status()
-            found.extend(response.json().get("data", []))
-            break
+        response = _send("POST", COLLECTION_URL, json={"identifiers": batch}, timeout=30)
+        response.raise_for_status()
+        cards = response.json().get("data", [])
+        found.extend(cards)
+        if on_batch is not None:
+            on_batch(cards)
     return found
 
 

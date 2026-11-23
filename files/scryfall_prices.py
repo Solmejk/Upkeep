@@ -58,26 +58,44 @@ def refresh(entries: list, only_new: bool = False) -> str:
     today = date.today().isoformat()
     saved = _load()
     ids = {e["card"].get("scryfall_id") for e in entries} - {None, ""}
-    fetched = today
-    if only_new or saved["fetched"] == today:
-        todo = sorted(ids - saved["prices"].keys())
+    prices = dict(saved["prices"])  # yesterday's stay until today's arrive
+    # printings already fetched today by a daily fetch that was cut short
+    done_today = set(saved.get("partial", {}).get("ids", [])) if saved.get("partial", {}).get("day") == today else set()
+    daily = not only_new and saved["fetched"] != today
+    if daily:
+        todo = sorted(ids - done_today)
+    else:
+        todo = sorted(ids - prices.keys())
         if not todo:
             return "no new printings" if only_new and saved["fetched"] != today else "already fetched today"
-        prices = saved["prices"]
-        if only_new and saved["fetched"]:
-            fetched = saved["fetched"]  # still due for the daily fetch
-    else:
-        todo = sorted(ids)
-        prices = {}
 
-    for card in scryfall.cards_collection([{"id": i} for i in todo]):
-        p = card.get("prices") or {}
-        prices[card["id"]] = {k: _to_float(p.get(k)) for k in PRICE_KEYS}
+    got = set()
 
+    def keep(cards):  # each batch as it arrives — a later failure doesn't lose it
+        for card in cards:
+            p = card.get("prices") or {}
+            prices[card["id"]] = {k: _to_float(p.get(k)) for k in PRICE_KEYS}
+            got.add(card["id"])
+        done_today.update(got)
+
+    try:
+        scryfall.cards_collection([{"id": i} for i in todo], on_batch=keep)
+    except Exception:
+        if daily:  # still due: the next try today fetches only what's missing
+            cache_io.write_json(paths.COLLECTION_PRICES_PATH, {
+                "fetched": saved["fetched"], "prices": prices,
+                "partial": {"day": today, "ids": sorted(done_today)}})
+        elif prices != saved["prices"]:
+            cache_io.write_json(paths.COLLECTION_PRICES_PATH, {**saved, "prices": prices})
+        raise
+
+    if daily:  # complete: drop printings no longer in the collection
+        prices = {i: p for i, p in prices.items() if i in ids}
+    fetched = today if (daily or saved["fetched"] == today or not saved["fetched"]) else saved["fetched"]
     cache_io.write_json(paths.COLLECTION_PRICES_PATH, {"fetched": fetched, "prices": prices})
     requests_sent = -(-len(todo) // scryfall.COLLECTION_BATCH)  # ceil
-    found = sum(1 for i in todo if i in prices)
-    return f"{found}/{len(todo)} printings from Scryfall ({requests_sent} requests)"
+    resumed = ", continuing today's earlier try" if daily and done_today - got else ""
+    return f"{len(got)}/{len(todo)} printings from Scryfall ({requests_sent} requests{resumed})"
 
 
 def apply(entries: list):

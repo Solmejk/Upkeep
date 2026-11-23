@@ -10,6 +10,7 @@ from pathlib import Path
 import requests
 
 from models import artist_proofs
+import scryfall
 from paths import IMAGES_DIR as CACHE_DIR
 from scryfall import HEADERS  # also used for non-Scryfall images (e.g. Moxfield profile pics) — Scryfall's User-Agent requirement is the strictest, so it works everywhere
 
@@ -46,7 +47,12 @@ def get_original_image_path(url: str, name: str, timeout: int = 10, retries: int
     
     for attempt in range(retries + 1):
         try:
-            response = requests.get(url, headers=HEADERS, timeout=timeout)
+            if url.startswith(scryfall.API_ROOT):
+                # an image by name through Scryfall's API (not its image
+                # servers): paced and backed off like every API request
+                response = scryfall.api_get(url, timeout=timeout)
+            else:
+                response = requests.get(url, headers=HEADERS, timeout=timeout)
             response.raise_for_status()
             break
         except requests.RequestException:
