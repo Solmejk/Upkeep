@@ -140,6 +140,7 @@ class MainWindow(QMainWindow):
         self.settings_screen.install_update_requested.connect(self.update_flow.offer)
         self.settings_screen.check_updates_requested.connect(lambda: self.update_flow.check(manual=True))
         if paths.FROZEN:
+            QTimer.singleShot(1500, self.update_flow.report_last_update)  # did last time's update arrive?
             QTimer.singleShot(3000, self.update_flow.check)
 
     def _add_page(self, name: str, widget: QWidget):

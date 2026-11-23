@@ -53,3 +53,23 @@ Name: "{autodesktop}\Upkeep"; Filename: "{app}\Upkeep.exe"; Tasks: desktopicon
 ; Not skipped when silent: the in-app updater (files/updater.py) runs this
 ; Setup with /SILENT after closing Upkeep, and this reopens the new version.
 Filename: "{app}\Upkeep.exe"; Description: "{cm:LaunchProgram,Upkeep}"; Flags: nowait postinstall
+
+[Code]
+// Silent installs (the in-app updater) first end any Upkeep.exe still
+// running for this user. An Upkeep that has closed its window can linger
+// (the one-file launcher waiting on its temp folder), and it holds
+// Upkeep.exe open, so the file can't be replaced; Restart Manager can't
+// close a process without a window, and a silent Setup gives up quietly.
+// Installs run by hand keep the normal "close the app first?" question.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  if WizardSilent then
+  begin
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM Upkeep.exe', '', SW_HIDE,
+         ewWaitUntilTerminated, ResultCode);
+    Sleep(1000);  // let Windows release the file
+  end;
+  Result := '';
+end;

@@ -11,6 +11,8 @@ available" button and Settings → Updates both drive it.
                    page instead.
 """
 
+import sys
+
 from PySide6.QtCore import QObject, QUrl, Qt, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QApplication, QMessageBox, QProgressDialog
@@ -123,11 +125,33 @@ class UpdateFlow(QObject):
     def _on_downloaded(self, setup_path):
         self._dialog.setLabelText("Starting the installer…")
         try:
-            updater.run_installer(setup_path)
+            updater.run_installer(setup_path, self.release.version)
         except OSError as e:
             self._on_download_failed(f"couldn't start the installer: {e}")
             return
+        print(f"update: started the installer for v{self.release.version}; closing")
         QApplication.quit()  # the Setup replaces the program and reopens it
+
+    def report_last_update(self):
+        """Called once at startup: if an update was started last time, say
+        whether it arrived — in the log, and with a message if it didn't
+        (a silent Setup that fails says nothing itself)."""
+        result = updater.pending_result()
+        if result is None:
+            return
+        outcome, old, new = result
+        if outcome == "updated":
+            print(f"update: now running v{new} (was {old})")
+            self.status_changed.emit(f"Updated to v{new}.")
+            return
+        print(f"update: v{new} didn't install, still on {VERSION} — see {updater.INSTALL_LOG_PATH}", file=sys.stderr)
+        self.status_changed.emit(f"The update to v{new} didn't install.")
+        QMessageBox.warning(
+            self._window, "Update didn't install",
+            f"Upkeep v{new} was downloaded, but the installer couldn't replace the program — "
+            f"you're still on {version_label()}.\n\nTry again from Settings → Updates. If it keeps "
+            f"failing, close every Upkeep window (check Task Manager), or run the Setup from the "
+            f"Releases page by hand.\n\nThe installer's log: {updater.INSTALL_LOG_PATH}")
 
     def _on_download_failed(self, message: str):
         if self._dialog is not None:

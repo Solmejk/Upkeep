@@ -77,5 +77,17 @@ def test_the_installer_gets_no_pyinstaller_variables(monkeypatch):
     assert "PATH" in env or "Path" in env  # everything else is kept
 
 
+def test_an_update_is_checked_on_the_next_start(monkeypatch, tmp_path):
+    monkeypatch.setattr(updater, "PENDING_PATH", tmp_path / "pending.json")
+    assert updater.pending_result("1.0.5") is None  # nothing pending
+
+    (tmp_path / "pending.json").write_text('{"from": "1.0.5", "to": "1.0.6"}')
+    assert updater.pending_result("1.0.6") == ("updated", "1.0.5", "1.0.6")
+    assert updater.pending_result("1.0.6") is None  # reported once
+
+    (tmp_path / "pending.json").write_text('{"from": "1.0.5", "to": "1.0.6"}')
+    assert updater.pending_result("1.0.5") == ("failed", "1.0.5", "1.0.6")
+
+
 def test_a_source_run_cannot_update_itself():
     assert not updater.can_self_update()  # tests run from source: no installed .exe to replace

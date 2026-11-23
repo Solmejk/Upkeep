@@ -15,6 +15,7 @@ Publishing a release (git tag vX.Y.Z + push) is what makes an update
 appear — see .github/workflows/release.yml.
 """
 
+import json
 import os
 import re
 import subprocess
@@ -34,6 +35,8 @@ HEADERS = {"User-Agent": f"Upkeep/{VERSION}", "Accept": "application/vnd.github+
 TIMEOUT = 10
 SETUP_ASSET = re.compile(r"^Upkeep-Setup-.*\.exe$", re.IGNORECASE)
 DOWNLOAD_DIR = paths.CACHE_DIR / "updates"
+PENDING_PATH = DOWNLOAD_DIR / "pending.json"  # the update just started — see pending_result
+INSTALL_LOG_PATH = paths.LOGS_DIR / "update-install.log"  # the Setup's own log of the last update
 
 
 @dataclass
@@ -125,7 +128,7 @@ def download(release: Release, progress=None) -> Path:
 def clean_downloads():
     """Deletes Setups downloaded for earlier updates (they're ~90 MB each);
     one still in use is left for next time."""
-    for old in DOWNLOAD_DIR.glob("Upkeep-Setup-*"):
+    for old in DOWNLOAD_DIR.glob("Upkeep-Setup-*.exe"):
         try:
             old.unlink()
         except OSError:
@@ -146,11 +149,30 @@ def clean_environment() -> dict:
     return env
 
 
-def run_installer(setup: Path):
+def run_installer(setup: Path, version: str):
     """Starts the Setup silently (a small progress window, no questions)
     and detached, so it outlives Upkeep. The caller then quits; the Setup
     replaces the program and starts the new version — with a clean
-    environment (see clean_environment)."""
+    environment (see clean_environment). The Setup writes its own log to
+    logs/update-install.log, and `version` is noted so the next start can
+    tell whether the update arrived (see pending_result)."""
+    paths.LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    PENDING_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PENDING_PATH.write_text(json.dumps({"from": VERSION, "to": version}), encoding="utf-8")
     flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
-    subprocess.Popen([str(setup), "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS"],
+    subprocess.Popen([str(setup), "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS",
+                      f"/LOG={INSTALL_LOG_PATH}"],
                      creationflags=flags, close_fds=True, env=clean_environment())
+
+
+def pending_result(current: str = VERSION):
+    """After an update was started: ("updated", from, to) if this is the
+    new version, ("failed", from, to) if it's still the old one, None if no
+    update was pending. Forgets the update either way."""
+    try:
+        pending = json.loads(PENDING_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    PENDING_PATH.unlink(missing_ok=True)
+    old, new = pending.get("from", "?"), pending.get("to", "?")
+    return ("updated" if current == new else "failed"), old, new
