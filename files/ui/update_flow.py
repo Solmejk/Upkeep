@@ -15,7 +15,7 @@ import sys
 
 from PySide6.QtCore import QObject, QUrl, Qt, Signal
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QApplication, QMessageBox, QProgressDialog
+from PySide6.QtWidgets import QApplication, QMessageBox, QProgressBar, QProgressDialog
 
 import updater
 from ui.background import run_in_background
@@ -104,6 +104,9 @@ class UpdateFlow(QObject):
     def _download(self, release):
         self._dialog = QProgressDialog(f"Downloading Upkeep v{release.version}…", None, 0, 100, self._window)
         self._dialog.setWindowTitle("Updating Upkeep")
+        bar = QProgressBar()
+        bar.setTextVisible(False)  # the label says "… 48 of 81 MB"; light text on the yellow bar is hard to read
+        self._dialog.setBar(bar)
         self._dialog.setWindowModality(Qt.ApplicationModal)
         self._dialog.setMinimumDuration(0)
         self._dialog.setAutoClose(False)

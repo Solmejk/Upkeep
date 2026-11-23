@@ -497,3 +497,18 @@ QTableWidget#statsTable QTableCornerButton::section {
     background-color: #1e1e1e;
     border: none;
 }
+
+/* Progress bars (the update download, ...) — the app's yellow, not
+   Windows' default green */
+QProgressBar {
+    background-color: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    color: #e8e8e8;
+    text-align: center;
+    min-height: 18px;
+}
+QProgressBar::chunk {
+    background-color: #e8a838;
+    border-radius: 3px;
+}

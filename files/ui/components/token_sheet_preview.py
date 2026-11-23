@@ -1,12 +1,12 @@
 """TokenSheetPreview: the Token Printer's page preview — the A4 pages the
 document will have, drawn to scale with the same layout as token_print.py
-(images turned 90° clockwise, two per row, 10 mm margins). Painted from
-the normal-size card images (loaded through ImageLoader, so it never
-blocks), not the full-size print images.
+(images turned 90° clockwise, two per row, centred, square corners, crop
+marks). Painted from the normal-size card images (loaded through
+ImageLoader, so it never blocks), not the full-size print images.
 """
 
-from PySide6.QtCore import Qt, QRectF
-from PySide6.QtGui import QPainter, QColor, QTransform, QPixmap
+from PySide6.QtCore import Qt, QPointF, QRectF
+from PySide6.QtGui import QColor, QImage, QPainter, QPainterPath, QPen, QPixmap, QTransform
 from PySide6.QtWidgets import QWidget
 
 import scryfall
@@ -19,6 +19,8 @@ PAGE_GAP = 34             # between pages (room for the "Page n of m" label)
 PAPER = QColor("#f4f4f4")
 PLACEHOLDER = QColor("#d0d0d0")
 TEXT_MUTED = QColor(theme.MUTED)
+MARK = QColor("black")  # crop marks
+NORMAL_CORNER_PX = 22   # corner radius of Scryfall's normal images (488 px wide)
 
 
 class TokenSheetPreview(QWidget):
@@ -64,7 +66,8 @@ class TokenSheetPreview(QWidget):
         ImageLoader.instance().submit(name, token["image_url"], name, w, h, 0, self._on_image_ready)
 
     def _on_image_ready(self, name, image):
-        pixmap = QPixmap.fromImage(image).transformed(QTransform().rotate(90), Qt.SmoothTransformation)
+        pixmap = QPixmap.fromImage(_square_corners(image)).transformed(QTransform().rotate(90),
+                                                                        Qt.SmoothTransformation)
         self._pixmaps[name] = pixmap
         self.update()
 
@@ -84,15 +87,17 @@ class TokenSheetPreview(QWidget):
             painter.end()
             return
 
+        # the grid's / crop marks' origin on the page: the printable area's
+        # corner (the margins) plus the grid's offset in it — as token_print
+        ox, oy = tp.MARGIN_MM + tp.GRID_X_MM, tp.MARGIN_MM + tp.GRID_Y_MM
         for page in range(pages):
             top = self._paint_page(painter, page)
-            for slot in range(tp.PER_PAGE):
+            on_page = min(tp.PER_PAGE, len(self._slots) - page * tp.PER_PAGE)
+            for slot in range(on_page):
                 i = page * tp.PER_PAGE + slot
-                if i >= len(self._slots):
-                    break
                 row, col = divmod(slot, tp.PER_ROW)
-                rect = QRectF((tp.MARGIN_MM + col * tp.IMAGE_WIDTH_MM) * s,
-                              top + (tp.MARGIN_MM + row * tp.IMAGE_HEIGHT_MM) * s,
+                rect = QRectF((ox + col * tp.IMAGE_WIDTH_MM) * s,
+                              top + (oy + row * tp.IMAGE_HEIGHT_MM) * s,
                               tp.IMAGE_WIDTH_MM * s, tp.IMAGE_HEIGHT_MM * s)
                 token = self._slots[i]
                 pixmap = self._pixmaps.get(scryfall.card_image_cache_name(token))
@@ -102,6 +107,12 @@ class TokenSheetPreview(QWidget):
                     painter.fillRect(rect, PLACEHOLDER)
                     painter.setPen(QColor(theme.FAINT))
                     painter.drawText(rect, Qt.AlignCenter | Qt.TextWordWrap, token["name"])
+
+            # crop marks (token_print.crop_marks is relative to the printable area)
+            painter.setPen(QPen(MARK, max(1.0, tp.MARK_WIDTH_MM * s)))
+            for x1, y1, x2, y2 in tp.crop_marks(on_page):
+                painter.drawLine(QPointF((tp.MARGIN_MM + x1) * s, top + (tp.MARGIN_MM + y1) * s),
+                                 QPointF((tp.MARGIN_MM + x2) * s, top + (tp.MARGIN_MM + y2) * s))
 
             painter.setPen(TEXT_MUTED)
             painter.drawText(QRectF(0, top + self._page_px_h + 4, self._page_px_w, 20),
@@ -115,3 +126,32 @@ class TokenSheetPreview(QWidget):
         painter.setBrush(PAPER)
         painter.drawRect(QRectF(0, top, self._page_px_w, self._page_px_h))
         return top
+
+
+def _square_corners(image: QImage) -> QImage:
+    """The preview's version of token_print.square_corners, for Scryfall's
+    normal images (their rounded corners are filled with white): each
+    corner square painted in the card's colour next to it, then the card
+    drawn on top clipped to its rounded shape."""
+    w, h = image.width(), image.height()
+    if w < 4 * NORMAL_CORNER_PX or h < 4 * NORMAL_CORNER_PX:
+        return image
+    r = NORMAL_CORNER_PX * w / 488
+    out = QImage(w, h, QImage.Format_RGB32)
+    out.fill(QColor("white"))
+    painter = QPainter(out)
+    painter.setRenderHint(QPainter.Antialiasing)
+    ri = round(r)
+    for cx, cy in ((0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)):
+        dx, dy = (1 if cx == 0 else -1), (1 if cy == 0 else -1)
+        a = image.pixelColor(cx + dx * (ri + 6), cy + dy * 4)
+        b = image.pixelColor(cx + dx * 4, cy + dy * (ri + 6))
+        colour = QColor((a.red() + b.red()) // 2, (a.green() + b.green()) // 2, (a.blue() + b.blue()) // 2)
+        size = ri + 2
+        painter.fillRect(QRectF(0 if dx > 0 else w - size, 0 if dy > 0 else h - size, size, size), colour)
+    shape = QPainterPath()
+    shape.addRoundedRect(QRectF(0, 0, w, h), r, r)
+    painter.setClipPath(shape)
+    painter.drawImage(0, 0, image)
+    painter.end()
+    return out
