@@ -357,6 +357,15 @@ QSpinBox#basicLandCount {
     font-size: 14px;
     qproperty-alignment: AlignCenter;
 }
+/* The − / + buttons are our own (stepButton), so the spin box's arrows are
+   hidden here, at zero width. Not with setButtonSymbols(NoButtons): from
+   Qt 6.12 a styled spin box with NoButtons squashes its text field to
+   1 px, so only a sliver of the number shows. */
+QSpinBox#basicLandCount::up-button,
+QSpinBox#basicLandCount::down-button {
+    width: 0px;
+    border: none;
+}
 QPushButton#stepButton {
     background-color: #2a2a2a;
     color: #e8a838;

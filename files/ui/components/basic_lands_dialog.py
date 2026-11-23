@@ -48,7 +48,8 @@ class BasicLandsDialog(QDialog):
             spin.setObjectName("basicLandCount")
             spin.setRange(0, MAX_PER_LAND)
             spin.setValue(current.get(name, 0))
-            spin.setButtonSymbols(QSpinBox.NoButtons)  # own − / + buttons below
+            # own − / + buttons below; the spin box's arrows are hidden in the
+            # stylesheet (basicLandCount) — not with NoButtons, see style.qss
             spin.setFixedWidth(56)
             spin.valueChanged.connect(self._update_total)
 

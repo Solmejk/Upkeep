@@ -11,7 +11,7 @@ from PySide6.QtCore import Qt, Signal, QUrl, QEvent
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox, QSpinBox,
-    QScrollArea, QFrame, QFileDialog, QMessageBox,
+    QScrollArea, QFrame, QFileDialog, QMessageBox, QSizePolicy,
 )
 
 import cache_io
@@ -26,7 +26,7 @@ from ui.components.image_tile import ImageTile
 from ui.components.token_sheet_preview import TokenSheetPreview
 
 DEFAULT_COPIES = 2
-THUMB_W, THUMB_H = 70, 98
+THUMB_W, THUMB_H = 100, 140
 SETTINGS_PATH = paths.DATA_DIR / "token_printer.json"  # remembers the last save folder
 
 
@@ -194,6 +194,9 @@ class TokenPrinterScreen(QWidget):
         """One token: thumbnail, name + what makes it, copies box."""
         row = QFrame()
         row.setObjectName("settingsSection")
+        # its own height only — with few tokens, the empty space goes below
+        # the list (its stretch) instead of making each row tall
+        row.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         layout = QHBoxLayout(row)
         layout.setContentsMargins(10, 8, 14, 8)
         layout.setSpacing(14)
@@ -205,7 +208,9 @@ class TokenPrinterScreen(QWidget):
         thumb.request_image_load()
         layout.addWidget(thumb)
 
-        text = QVBoxLayout()
+        text = QVBoxLayout()  # centred beside the image (stretch above and below)
+        text.setSpacing(4)
+        text.addStretch()
         name = QLabel(token["name"])
         name.setObjectName("settingsLabel")
         text.addWidget(name)
@@ -222,7 +227,8 @@ class TokenPrinterScreen(QWidget):
         copies.setObjectName("basicLandCount")
         copies.setRange(0, 30)
         copies.setValue(DEFAULT_COPIES)
-        copies.setButtonSymbols(QSpinBox.NoButtons)
+        # its own arrows are hidden in the stylesheet (basicLandCount) — not
+        # with NoButtons, which squashes the number from Qt 6.12 (style.qss)
         copies.setFixedWidth(56)
         copies.valueChanged.connect(self._update_summary)
         stepper = QHBoxLayout()
