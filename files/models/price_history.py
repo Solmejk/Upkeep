@@ -84,28 +84,46 @@ def series(scryfall_id: str, foil: bool) -> list:
     return points
 
 
+PERCENT_MIN_EUR = 1.0  # the % ranking only counts cards worth this much (before or after)
+
+
 def movers(tiles: list):
-    """Biggest riser and faller between the last two recorded days among
-    collection tiles (merged entries: one per printing + finish). Returns
-    (riser, faller, previous_day) — each mover a (tile, old, new) tuple or
-    None — or None if fewer than two days are recorded. Ranked by the
-    change in € per copy."""
+    """Biggest risers and fallers between the last two recorded days among
+    collection tiles (merged entries: one per printing + finish), ranked
+    two ways. Returns None if fewer than two days are recorded, else
+
+        {"previous_day": "YYYY-MM-DD",
+         "by_value":   (riser, faller),   # biggest change in € per copy
+         "by_percent": (riser, faller)}   # biggest change in %, cards
+                                          # worth PERCENT_MIN_EUR+ only —
+                                          # else bulk dominates (€0.02 ->
+                                          # €0.05 is +150 %)
+
+    each mover a (tile, old, new) tuple, or None if nothing went that way.
+    The same card can top both rankings."""
     recorded = days()
     if len(recorded) < 2:
         return None
     prev_day, last_day = recorded[-2], recorded[-1]
-    riser = faller = None
+    best = {"value_up": None, "value_down": None, "pct_up": None, "pct_down": None}
+    score = {k: 0.0 for k in best}
+
+    def consider(key, value, mover):
+        if best[key] is None or value > score[key]:
+            best[key], score[key] = mover, value
+
     for tile in tiles:
         sid = tile["card"].get("scryfall_id")
         if not sid:
             continue
         foil = bool(tile.get("isFoil")) or str(tile.get("finish", "")).lower() in ("foil", "etched")
         old, new = price_on(prev_day, sid, foil), price_on(last_day, sid, foil)
-        if old is None or new is None:
+        if old is None or new is None or new == old:
             continue
-        diff = new - old
-        if diff > 0 and (riser is None or diff > riser[2] - riser[1]):
-            riser = (tile, old, new)
-        if diff < 0 and (faller is None or diff < faller[2] - faller[1]):
-            faller = (tile, old, new)
-    return riser, faller, prev_day
+        mover, diff = (tile, old, new), new - old
+        consider("value_up" if diff > 0 else "value_down", abs(diff), mover)
+        if old > 0 and max(old, new) >= PERCENT_MIN_EUR:
+            consider("pct_up" if diff > 0 else "pct_down", abs(diff) / old, mover)
+    return {"previous_day": prev_day,
+            "by_value": (best["value_up"], best["value_down"]),
+            "by_percent": (best["pct_up"], best["pct_down"])}

@@ -20,6 +20,8 @@ from ui.components.card_grid_view import CardGridView
 from ui.components.color_pie import ColorPie, ColorLegend
 from ui.components.value_chart import ValueChart
 from ui.components.movers_panel import MoversPanel
+
+MOVERS_SIDE_BY_SIDE_FROM = 1400  # screen width (px) from which the movers' two groups sit side by side
 from ui.components.card_grid_view import entry_payload
 from ui.components.search_box import SearchBox
 
@@ -61,6 +63,7 @@ class CollectionScreen(QWidget):
         self.app = app
         self._cards = app.collection.cards if cards is None else cards
         self._extra_stats = extra_stats
+        self._movers = None  # the biggest movers panel (collection only)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -127,6 +130,7 @@ class CollectionScreen(QWidget):
             movers = MoversPanel(price_history.movers(merge_languages(self._cards)))
             movers.tile_clicked.connect(lambda tile: self._on_card_clicked(entry_payload(tile)))
             chart_layout.addWidget(movers)
+            self._movers = movers  # stacked in narrow windows — see resizeEvent
             # leftover width goes to the right edge, not into gaps between the charts
             chart_layout.addStretch()
         else:
@@ -185,6 +189,13 @@ class CollectionScreen(QWidget):
         the background Moxfield fetch."""
         self._refresh_btn.setEnabled(enabled)
         self._refresh_btn.setText("Refresh collection" if enabled else "Refreshing…")
+
+    def resizeEvent(self, event):
+        """Narrow windows: the biggest movers' two groups stack, so the
+        charts row still fits (side by side it needs ~1300 px)."""
+        super().resizeEvent(event)
+        if self._movers is not None:
+            self._movers.set_stacked(event.size().width() < MOVERS_SIDE_BY_SIDE_FROM)
 
     def _on_card_clicked(self, card: dict):
         """Slot for the grid's card_clicked: adds the "used in decks"
