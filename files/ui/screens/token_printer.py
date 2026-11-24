@@ -145,7 +145,7 @@ class TokenPrinterScreen(QWidget):
         there."""
         super().showEvent(event)
         current = self._deck_combo.currentText()
-        self._decks = sorted((d for d in self.app.decks if d.is_imported), key=lambda d: d.name.lower())
+        self._decks = sorted(self.app.decks, key=lambda d: d.name.lower())
         self._deck_combo.blockSignals(True)
         self._deck_combo.clear()
         self._deck_combo.addItem("Choose a deck…")
@@ -166,7 +166,7 @@ class TokenPrinterScreen(QWidget):
 
         deck = self._decks[index - 1] if 0 < index <= len(self._decks) else None
         if deck is None:
-            self._show_note("Moxfield decks only — Deck Maker decks have no token list.")
+            self._show_note("Choose a deck to print its tokens.")
             self._update_summary()
             return
         if not deck.cards:

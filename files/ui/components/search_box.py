@@ -1,5 +1,5 @@
-"""SearchBox: the Scryfall-syntax search field used by the Collection,
-DeckDetail and Deck Maker screens — a line edit plus a status label (result
+"""SearchBox: the Scryfall-syntax search field used by the Collection
+and DeckDetail screens — a line edit plus a status label (result
 count, or the parse error when the query is invalid). Compiles the
 query (card_search.compile_query) once typing pauses and emits the
 resulting predicate; the screen decides what to filter with it.

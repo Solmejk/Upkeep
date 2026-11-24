@@ -188,7 +188,7 @@ class CardModal(OverlayModal):
         cn = card.get("cn", "")
         price = card.get("price", 0)
         self._meta_label.setText(f"{set_code} · #{cn} · €{price:.2f}")
-        # the copy's language if the payload says (collection / Deck Maker
+        # the copy's language if the payload says (collection
         # cards), else the printing's — Moxfield decks don't record it
         languages = card.get("languages")
         if languages and len(languages) > 1:

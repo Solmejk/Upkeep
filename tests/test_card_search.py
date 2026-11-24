@@ -1,5 +1,5 @@
-"""card_search: the Scryfall-style search used by the Collection, deck and
-Deck Maker search boxes."""
+"""card_search: the Scryfall-style search used by the Collection and deck
+search boxes."""
 
 import pytest
 

@@ -9,10 +9,11 @@ from PySide6.QtCore import QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
     QStackedWidget, QPlainTextEdit, QTextBrowser, QScrollArea,
 )
 
+import moxfield
 import paths
 import sync_log
 from ui.components.section_card import SectionCard, back_button
@@ -69,7 +70,8 @@ class SettingsScreen(QWidget):
         title.setObjectName("screenTitle")
         outer.addWidget(title)
 
-        for section in (self._build_sync_log_section(), self._build_import_section(), self._build_cache_section(),
+        for section in (self._build_sync_log_section(), self._build_moxfield_access_section(),
+                        self._build_import_section(), self._build_cache_section(),
                         self._build_search_help_section(), self._build_proofs_section(),
                         self._build_updates_section(), self._build_logs_section()):
             outer.addWidget(section)  # SectionCards: fixed height, the page scrolls
@@ -105,10 +107,64 @@ class SettingsScreen(QWidget):
             "Import from Moxfield export",
             "If refreshing from Moxfield fails, bring your collection in from a file instead: on "
             "moxfield.com open your Collection → Export → CSV, then import that file here. Card "
-            "data and prices come from Scryfall. (Decks: Decks → Import deck, with a deck's "
-            "text export.)")
+            "data and prices come from Scryfall.")
         self._import_btn = section.add_button("Import collection (CSV)…", self.import_collection_requested.emit)
         return section
+
+    def _build_moxfield_access_section(self) -> QWidget:
+        """The "Moxfield access" card: the private user-agent Moxfield
+        issued for Upkeep. Saved encrypted for this Windows user (see
+        moxfield.py); once saved it is never shown again, only replaced
+        or removed."""
+        section = SectionCard(
+            "Moxfield access",
+            "Moxfield only answers Upkeep with the private user-agent they issued. Paste it here "
+            "once: it is stored encrypted for your Windows account on this PC and never shown, "
+            "logged or uploaded. Keep it secret — don't share it. Upkeep makes at most one "
+            "Moxfield request per second, as Moxfield requires.")
+        self._access_status = QLabel()
+        self._access_status.setObjectName("settingsLabel")
+        self._access_status.setWordWrap(True)
+        section.body.addWidget(self._access_status)
+        self._access_input = QLineEdit()
+        self._access_input.setEchoMode(QLineEdit.Password)
+        self._access_input.setPlaceholderText("Paste the user-agent from Moxfield")
+        self._access_input.returnPressed.connect(self._save_moxfield_access)
+        section.body.addWidget(self._access_input)
+        self._access_remove_btn = section.add_button("Remove", self._remove_moxfield_access, secondary=True)
+        self._access_save_btn = section.add_button("Save", self._save_moxfield_access)
+        self._refresh_moxfield_access()
+        return section
+
+    def _refresh_moxfield_access(self):
+        has = moxfield.has_user_agent()
+        self._access_status.setText(
+            "✓ Set up — Upkeep can reach Moxfield." if has
+            else "Not set up — Upkeep won't contact Moxfield. You can still import a Moxfield export below.")
+        self._access_input.clear()
+        self._access_input.setPlaceholderText(
+            "Paste a new user-agent to replace it" if has else "Paste the user-agent from Moxfield")
+        self._access_remove_btn.setVisible(has)
+        self._access_save_btn.setText("Replace" if has else "Save")
+
+    def _save_moxfield_access(self):
+        try:
+            moxfield.set_user_agent(self._access_input.text())
+        except ValueError as e:
+            QMessageBox.warning(self, "Moxfield access", str(e))
+            return
+        except OSError as e:
+            QMessageBox.warning(self, "Moxfield access", f"Couldn't save it: {e}")
+            return
+        self._refresh_moxfield_access()
+
+    def _remove_moxfield_access(self):
+        reply = QMessageBox.question(
+            self, "Moxfield access",
+            "Remove the saved user-agent? Upkeep then stops contacting Moxfield until you add it again.")
+        if reply == QMessageBox.Yes:
+            moxfield.clear_user_agent()
+            self._refresh_moxfield_access()
 
     def set_refresh_enabled(self, enabled: bool):
         """Toggles the Sync / import buttons between normal and busy
@@ -200,7 +256,7 @@ class SettingsScreen(QWidget):
         and a button that opens the full guide."""
         section = SectionCard(
             "Search syntax",
-            "The Collection, deck and Deck Maker card searches use Scryfall's syntax, "
+            "The Collection and deck card searches use Scryfall's syntax, "
             "e.g. t:creature c:g mv<=3. See every filter with examples.")
         section.add_button("Open guide", lambda: self._pages.setCurrentWidget(self._search_help_page))
         return section

@@ -2,12 +2,11 @@
 fetched fresh — see load() for the two modes.
 """
 
-from concurrent.futures import ThreadPoolExecutor
-
 import cache_io
 import moxfield
 import paths
 import scryfall_prices
+
 
 class Collection:
     def __init__(self, collection_id):
@@ -57,18 +56,13 @@ class Collection:
         and returns the first page's response with "data" replaced by all
         pages' entries combined, or None if the collection is empty.
         Moxfield rejects pageSize 0 and caps pages at 100 entries, so the
-        full collection takes one request per page — pages after the
-        first (which reports totalPages) are fetched a few at a time."""
-        def fetch_page(page):
-            return moxfield.fetch_collection_page(self._collection_id, page)
-
-        data = fetch_page(1)
+        full collection takes one request per page — one after another,
+        at Moxfield's 1 request per second (see moxfield.py)."""
+        data = moxfield.fetch_collection_page(self._collection_id, 1)
         if data == {}:
             return None
 
-        remaining = range(2, data.get("totalPages", 1) + 1)
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            for page_data in pool.map(fetch_page, remaining):  # keeps page order
-                data["data"].extend(page_data["data"])
+        for page in range(2, data.get("totalPages", 1) + 1):
+            data["data"].extend(moxfield.fetch_collection_page(self._collection_id, page)["data"])
 
         return data

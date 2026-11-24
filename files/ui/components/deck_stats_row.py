@@ -1,7 +1,7 @@
 """DeckStatsRow: a deck's statistics side by side — mana curve, color
 balance pie, mana production pie (each titled underneath), optionally
 with the "Avg. mana value (nonland)" line above. Shown on the deck detail
-screen and in the Deck Maker's card preview; the numbers come from
+screen; the numbers come from
 deck_stats. Call set_cards() with models.deck.Deck.cards-shaped cards.
 """
 

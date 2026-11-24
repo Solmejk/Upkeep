@@ -3,7 +3,7 @@
 One row per seat — player, whose deck it is ("Own deck", or the player
 it was borrowed from), deck, winner button — plus the date and notes. Players are picked from the tracker's players, or made on the spot
 ("New guest…" / "Moxfield player…"). The deck box suggests decks for the
-deck's owner — your own active decks (Moxfield + Deck Maker) for you, a
+deck's owner — your own active (Moxfield) decks for you, a
 Moxfield player's public decks (fetched in the background, once per
 session), a guest's earlier decks — and also takes any typed-in name.
 """
@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
 )
 
 from models import game_tracker as gt
-from models.deck import SOURCE_LOCAL
 from ui.background import run_in_background
 
 NEW_GUEST, NEW_MOXFIELD = "__new_guest__", "__new_moxfield__"
@@ -269,8 +268,7 @@ class GameDialog(QDialog):
         if is_me:
             for deck in sorted((d for d in self.app.decks if d.active), key=lambda d: d.name.lower()):
                 commander = deck.commanders[0]["name"] if deck.commanders else ""
-                source = gt.DECK_LOCAL if deck.source == SOURCE_LOCAL else gt.DECK_MOXFIELD
-                decks.append(gt.DeckRef(deck.name, source, deck.deck_id, commander))
+                decks.append(gt.DeckRef(deck.name, gt.DECK_MOXFIELD, deck.deck_id, commander))
         elif player.kind == gt.MOXFIELD:
             key = player.username.lower()
             if key in _moxfield_decks_cache:

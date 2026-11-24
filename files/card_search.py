@@ -545,8 +545,8 @@ def _compare_sets(actual: set, op: str, target: set) -> bool:
 # the search supplies them (compile_query's context); where it doesn't,
 # the filter explains where it works.
 CONTEXT_CHECKS = {
-    "used": "'is:used' works in the Collection and Deck Maker searches",
-    "unique": "'is:unique' works in the Collection, deck and Deck Maker searches",
+    "used": "'is:used' works in the Collection search",
+    "unique": "'is:unique' works in the Collection and deck searches",
 }
 
 

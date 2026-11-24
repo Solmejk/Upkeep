@@ -7,7 +7,6 @@ import cache_io
 import moxfield
 import paths
 from models.collection import Collection
-from models import local_decks
 from models.deck import Deck, SOURCE_MOXFIELD
 
 class User:
@@ -76,8 +75,8 @@ class User:
     def load_decks(self, force=False):
         """Loads the list of this user's decks as Deck stubs (id + name
         only — each deck's cards/format load separately, on demand, via
-        Deck.load()): their Moxfield decks, then the decks they built in
-        the Deck Maker (see models.local_decks). force: False reads the
+        Deck.load()): their Moxfield decks. (Decks built in the Deck
+        Maker now belong to the separate Upkeep Builder.) force: False reads the
         cached decks_<username>.json if present; True fetches the
         Moxfield deck list from its search API and overwrites the cache."""
         path = paths.decks_list_cache_path(self._username)
@@ -93,7 +92,6 @@ class User:
             name = deck["name"]
             deck_id = deck["publicId"]
             self._decks.append(Deck(deck_id, name))
-        self._decks += local_decks.load_stubs(self._username)
 
     def load_collection(self, force=False):
         """(Re)builds self._collection using the current collection_id

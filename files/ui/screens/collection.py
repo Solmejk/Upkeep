@@ -158,7 +158,7 @@ class CollectionScreen(QWidget):
         self._search.search_changed.connect(self._on_search_changed)
         search_layout.addWidget(self._search)
 
-        # Sort — same button as the Availability screen / Deck Maker
+        # Sort — same button as the Availability screen
         self._sort_mode = card_sort.SORT_NAME
         self._sort_btn = build_sort_button(card_sort.SORT_LABELS, self._sort_mode, self._on_sort_changed)
         search_layout.addSpacing(8)

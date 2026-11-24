@@ -55,7 +55,7 @@ def _pdf_reading():
 
 def _app_modules():
     import importlib
-    for name in ("cardmarket", "deck_import", "token_print", "scryfall_prices", "updater", "ui.main_window"):
+    for name in ("cardmarket", "collection_import", "token_print", "scryfall_prices", "updater", "ui.main_window"):
         importlib.import_module(name)  # each must import cleanly in the build
     from models import game_tracker
     game_tracker.GameTracker(paths.USER_ROOT / ".self_test_tracker.json")

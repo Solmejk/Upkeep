@@ -1,5 +1,5 @@
 """MainWindow: the app's top-level window. Owns the sidebar, the screen
-stack (Home/Decks/Collection/Deck Maker/Game Tracker/Other Apps/Settings + the on-demand
+stack (Home/Decks/Collection/Game Tracker/Other Apps/Settings + the on-demand
 DeckDetail screen), and the two shared popouts (CardModal, ExportModal).
 Also owns every cross-screen flow that doesn't belong to a single
 screen: login, logout, cache-clear, Moxfield refresh, and rebuilding the
@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
 )
 
 from app import MTGApp
-from models import deck_editing, local_decks
 from models.user import User
 from ui.sidebar import Sidebar
 from ui.screens.home import HomeScreen
@@ -22,11 +21,10 @@ from ui.screens.decks import DecksScreen
 from ui.screens.deck_detail import DeckDetailScreen
 from ui.screens.collection import CollectionScreen
 from ui.screens.settings import SettingsScreen
-from ui.screens.deck_maker import DeckMakerScreen
 from ui.screens.other_apps import OtherAppsScreen
 from ui.screens.game_tracker import GameTrackerScreen
 from ui.components.card_modal import CardModal
-from ui.components.export_modal import DeckExportModal, ExportModal
+from ui.components.export_modal import ExportModal
 from ui.components.player_modal import PlayerModal
 from ui.components.tracker_deck_modal import TrackerDeckModal
 from ui.background import run_in_background
@@ -65,7 +63,6 @@ class MainWindow(QMainWindow):
         self.home_screen = self._new_home_screen()
         self.decks_screen = self._new_decks_screen()
         self.collection_screen = self._new_collection_screen()
-        self.deck_maker_screen = DeckMakerScreen(app)
         self.game_tracker_screen = GameTrackerScreen(app)
         self.other_apps_screen = OtherAppsScreen(app)
         self.settings_screen = SettingsScreen(app)
@@ -75,7 +72,6 @@ class MainWindow(QMainWindow):
         self._add_page("Home",         self.home_screen)
         self._add_page("Decks",        self.decks_screen)
         self._add_page("Collection",   self.collection_screen)
-        self._add_page("Deck Maker",   self.deck_maker_screen)
         self._add_page("Game Tracker", self.game_tracker_screen)
         self._add_page("Other Apps",   self.other_apps_screen)
         self._add_page("Settings",     self.settings_screen)
@@ -87,10 +83,6 @@ class MainWindow(QMainWindow):
         self.sidebar.login_requested.connect(self._on_login_requested)
 
         self.deck_detail_screen.back_requested.connect(self._close_deck_detail)
-        self.deck_detail_screen.delete_requested.connect(self._delete_deck)
-        self.deck_detail_screen.edit_requested.connect(self._edit_deck)
-        # confirmed languages change which exact copies count as used
-        self.deck_detail_screen.languages_changed.connect(self.deck_maker_screen.refresh_usage)
 
         # Artist proofs changed (settings screen): show the new images
         self.settings_screen.proofs_changed.connect(self._on_proofs_changed)
@@ -116,9 +108,7 @@ class MainWindow(QMainWindow):
         self.deck_detail_screen.card_clicked.connect(self.card_modal.show_card)
         self.deck_detail_screen.tracker_deck_clicked.connect(self._show_tracker_deck)
         self.card_modal.token_printing_changed.connect(self._on_token_printing_changed)
-        self.deck_maker_screen.card_clicked.connect(self.card_modal.show_card)
         self.other_apps_screen.card_clicked.connect(self.card_modal.show_card)
-        self.deck_maker_screen.deck_saved.connect(self._rebuild_data_screens)  # show it on Decks etc.
 
         # Export modal (availability screen)
         self.export_modal = ExportModal(self)
@@ -129,10 +119,6 @@ class MainWindow(QMainWindow):
         self.game_tracker_screen.player_clicked.connect(self._show_player)
         self.tracker_deck_modal = TrackerDeckModal(self)
         self.game_tracker_screen.deck_clicked.connect(self._show_tracker_deck)
-
-        # Moxfield export modal (Deck Maker decks, from the deck detail screen)
-        self.deck_export_modal = DeckExportModal(self)
-        self.deck_detail_screen.export_requested.connect(self.deck_export_modal.show_export)
 
         QTimer.singleShot(50, self._lazy_load_decks)
 
@@ -181,8 +167,6 @@ class MainWindow(QMainWindow):
     def _new_decks_screen(self) -> DecksScreen:
         screen = DecksScreen(self.app)
         screen.deck_selected.connect(self._open_deck_detail)
-        screen.delete_requested.connect(self._delete_deck)
-        screen.deck_imported.connect(self._on_deck_imported)
         screen.refresh_requested.connect(
             lambda: self._start_refresh(sync.refresh_decks, "Decks page", "decks_screen"))
         return screen
@@ -237,14 +221,6 @@ class MainWindow(QMainWindow):
         player = tracker.players[player_id]
         self.player_modal.show_player(tracker, player_id, self.app.is_me(player))
 
-    def _on_deck_imported(self, deck_id: str):
-        """A decklist was imported (Decks screen): reload the deck lists so
-        it shows up everywhere, then open it."""
-        self._rebuild_data_screens()
-        deck = next((d for d in self.app.decks if d.deck_id == deck_id), None)
-        if deck is not None:
-            self._open_deck_detail(deck)
-
     def _on_token_printing_changed(self):
         """A token's default printing changed (card popup): redraw the
         open deck's Tokens section with it."""
@@ -253,37 +229,7 @@ class MainWindow(QMainWindow):
 
     def _on_proofs_changed(self):
         """Artist proofs were added / changed / removed: rebuild the data
-        screens (fresh image loads) and reload the Deck Maker's grids."""
-        self._rebuild_data_screens()
-        self.deck_maker_screen.reload_images()
-
-    def _edit_deck(self, deck):
-        """Slot for DeckDetailScreen.edit_requested: opens the deck in the
-        Deck Maker — the deck itself for Deck Maker decks (saving updates
-        it), a new copy for website imports."""
-        try:
-            draft, left_out = deck_editing.draft_from_deck(deck, self.app.collection.cards, copy=deck.is_imported)
-        except deck_editing.EditError as e:
-            QMessageBox.warning(self, "Can't edit deck", str(e))
-            return
-        if self.deck_maker_screen.open_draft(draft, left_out):
-            self.sidebar.set_current(self.stack.indexOf(self.deck_maker_screen))
-
-    def _delete_deck(self, deck):
-        """Slot for delete_requested (Decks tile menu / DeckDetail button):
-        after confirming, deletes a Deck Maker deck's file and reloads the
-        deck lists. Website imports can't be deleted (ignored)."""
-        if deck is None or deck.is_imported:
-            return
-        reply = QMessageBox.question(
-            self, "Delete deck", f"Delete \"{deck.name}\"? This can't be undone.",
-        )
-        if reply != QMessageBox.Yes:
-            return
-        local_decks.delete(deck.deck_id)
-        self.deck_maker_screen.forget_saved_deck(deck.deck_id)
-        if self.stack.currentWidget() is self.deck_detail_screen:
-            self.stack.setCurrentWidget(self.decks_screen)
+        screens (fresh image loads)."""
         self._rebuild_data_screens()
 
     def _start_refresh(self, job, source: str, screen_attr: str):
@@ -358,15 +304,10 @@ class MainWindow(QMainWindow):
 
     def _on_refresh_failed(self, message: str):
         """Background-task callback: re-enables the refresh button and
-        surfaces the error. message: str(exception) from the failed fetch.
-        Moxfield refusing (403) gets a pointer to the CSV import."""
+        surfaces the error. message: str(exception) from the failed fetch
+        (Moxfield's own errors already say what to do — see moxfield.py)."""
         self._refresh_in_progress = False
         getattr(self, self._refreshing_screen_attr).set_refresh_enabled(True)
-        if "403" in message and "moxfield" in message.lower():
-            message = ("Moxfield refused the request (403 Forbidden) — its API is blocking Upkeep "
-                       "right now.\n\nYou can still bring your collection in from a file: Settings → "
-                       "Import from Moxfield export. Prices can be updated on their own with Settings → "
-                       "Sync → Refresh prices.")
         QMessageBox.warning(self, "Refresh failed", message)
 
     def _on_login_requested(self):
@@ -467,9 +408,6 @@ class MainWindow(QMainWindow):
         self._replace_screen("decks_screen", self._new_decks_screen())
         self._replace_screen("collection_screen", self._new_collection_screen())
 
-        # Not rebuilt (that would lose a deck in progress) — just re-read
-        self.deck_maker_screen.reload_collection()
-
         self._lazy_load_decks()  # re-fetch each deck's contents in the background
 
     def _replace_screen(self, attr_name: str, new_widget: QWidget):
@@ -520,7 +458,6 @@ class MainWindow(QMainWindow):
         _result is unused (_load_all_deck_contents returns None)."""
         # Trigger the decks screen to refresh now that data is available
         self.decks_screen.rebuild_grid()
-        self.deck_maker_screen.refresh_usage()  # "used in another deck" marks need deck contents
         self._prefetch_images()
 
     def _prefetch_images(self):

@@ -15,7 +15,6 @@ from models.deck_state import is_active, set_active
 # import site is just a new value here. Files written before this field
 # existed are Moxfield decks.
 SOURCE_MOXFIELD = "moxfield"
-SOURCE_LOCAL = "local"  # built in the Deck Maker
 
 # Bumped whenever _trim_raw_deck's output gains data older cached decks
 # lack; a cached deck with an older version is flagged `outdated` so the
@@ -25,9 +24,8 @@ CACHE_VERSION = 5  # 4: tokens, 5: token ids (default printings)
 
 class Deck:
     def __init__(self, deck_id, name, source=SOURCE_MOXFIELD):
-        """deck_id: the Moxfield public ID (or a Deck Maker deck's local
-        ID). name: display name — used as a placeholder until load()
-        overwrites it with the file's own name (callers that only have an
+        """deck_id: the Moxfield public ID. name: display name — used as a
+        placeholder until load() overwrites it with the file's own name (callers that only have an
         ID, like the availability check, pass ""). source: SOURCE_*.
         Starts with no cards — call load() to populate."""
         self._deck_id = deck_id
@@ -66,14 +64,8 @@ class Deck:
 
     @property
     def source(self):
-        """Where the deck comes from: SOURCE_MOXFIELD, SOURCE_LOCAL, ..."""
+        """Where the deck comes from: SOURCE_MOXFIELD, ..."""
         return self._source
-
-    @property
-    def is_imported(self) -> bool:
-        """True for decks imported from a website, False for decks built
-        in the Deck Maker."""
-        return self._source != SOURCE_LOCAL
 
     @property
     def value(self):
@@ -119,12 +111,7 @@ class Deck:
         the deck empty if not cached yet); True fetches the full decklist
         from Moxfield, trims it down (_trim_raw_deck), and overwrites the
         cache."""
-        if self._source == SOURCE_LOCAL:
-            # Deck Maker decks live only on disk — nothing to fetch
-            path = paths.local_deck_path(self._deck_id)
-            force = False
-        else:
-            path = paths.deck_cache_path(self._deck_id)
+        path = paths.deck_cache_path(self._deck_id)
 
         if not force:
             data = cache_io.read_json(path)
@@ -142,8 +129,7 @@ class Deck:
         self._total_cards = data["total_cards"]
         self._value = data["value"]
         self._source = data.get("source", SOURCE_MOXFIELD)
-        # only website imports can be re-fetched in the current format
-        self._outdated = self._source != SOURCE_LOCAL and data.get("cache_version", 1) < CACHE_VERSION
+        self._outdated = data.get("cache_version", 1) < CACHE_VERSION
 
     @staticmethod
     def _trim_raw_deck(raw: dict) -> dict:

@@ -3,8 +3,8 @@ names for the language codes (Scryfall / Moxfield codes).
 
 Only the collection records the language of each copy (entry
 "language": {"code", "name"}). Moxfield deck data has no language — those
-cards count as English (their printing's "lang"). Deck Maker decks store
-the language of the collection copy each card was added from.
+cards count as English (their printing's "lang"). Deck files that store
+a card's "language" (decks built in the old Deck Maker) use that.
 """
 
 DEFAULT_LANGUAGE = "en"
@@ -31,7 +31,7 @@ def entry_language(entry: dict) -> str:
 
 def deck_card_language(card: dict) -> str:
     """Language code of a saved deck's card (models.deck.Deck.cards):
-    stored for Deck Maker decks, else the printing's "lang" (Moxfield
+    stored in the deck file if any, else the printing's "lang" (Moxfield
     decks don't record it), else English."""
     if card.get("language"):
         return str(card["language"]).lower()

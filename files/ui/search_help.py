@@ -29,8 +29,8 @@ def _section(title, rows):
 
 
 SEARCH_HELP_HTML = f"""
-<p>The card search boxes on the <b>Collection</b> page, inside a deck, and in the
-<b>Deck Maker</b> understand <a href="https://scryfall.com/docs/syntax" style="color:{_ACCENT};">Scryfall's search syntax</a>.
+<p>The card search boxes on the <b>Collection</b> page and inside a deck
+understand <a href="https://scryfall.com/docs/syntax" style="color:{_ACCENT};">Scryfall's search syntax</a>.
 Combine as many filters as you like — results update when you stop typing,
 and a mistake in the query is explained next to the search box.</p>
 
@@ -99,7 +99,7 @@ name.</p>
     ("is:proxy", "your copy is a proxy"),
     ("lang:en &nbsp; lang:japanese", "your copy's language"),
     ("is:used", "every copy you own of this version is in an active deck "
-                "(Collection and Deck Maker searches)"),
+                "(Collection search)"),
     ("-is:used", "you have a free copy — not tied up in an active deck"),
     ("is:unique", "you own exactly one copy, across all sets, foils and languages"),
 ])}

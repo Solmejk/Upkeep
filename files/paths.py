@@ -50,8 +50,9 @@ COLLECTION_PRICES_PATH = CACHE_DIR / "collection_prices.json"  # Scryfall prices
 
 # User-created data — NOT cache: clear_cache never touches this folder.
 DATA_DIR = USER_ROOT / "data"
-LOCAL_DECKS_DIR = DATA_DIR / "decks"  # decks built in the Deck Maker
 DECK_LANGUAGES_PATH = DATA_DIR / "deck_languages.json"  # confirmed card languages per Moxfield deck
+# Moxfield's private user-agent for Upkeep (secret: encrypted, see secret_store.py and moxfield.py)
+MOXFIELD_ACCESS_PATH = DATA_DIR / "moxfield_access.bin"
 SHOWCASES_PATH = DATA_DIR / "showcases.json"  # Home screen showcases
 GAME_TRACKER_PATH = DATA_DIR / "game_tracker.json"  # players + games, see models.game_tracker
 TOKEN_PRINTINGS_PATH = DATA_DIR / "token_printings.json"  # chosen default printing per token
@@ -75,12 +76,6 @@ def decks_list_cache_path(username: str) -> Path:
     """Path to a user's cached deck list JSON (id/name pairs only —
     individual deck contents live under DECKS_DIR, see deck_cache_path)."""
     return CACHE_DIR / f"decks_{username}.json"
-
-
-def local_deck_path(deck_id: str) -> Path:
-    """Path to a Deck Maker deck's JSON (same format as deck_cache_path's
-    files, plus "source": "local")."""
-    return LOCAL_DECKS_DIR / f"{deck_id}.json"
 
 
 def deck_cache_path(deck_id: str) -> Path:

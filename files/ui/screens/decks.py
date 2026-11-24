@@ -5,7 +5,7 @@ name. Clicking a tile opens DeckDetailScreen (wired up in MainWindow).
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QPushButton, QMenu, QLineEdit,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QPushButton, QLineEdit,
 )
 
 from app import MTGApp
@@ -21,8 +21,7 @@ from ui.components.sticky_page import StickyHeaderPage
 
 
 # Caption badge per deck source: (letter, color) shown before the deck
-# name. Decks built in the Deck Maker (SOURCE_LOCAL) get none; a new import
-# site gets its own entry here.
+# name. A new import site gets its own entry here.
 SOURCE_BADGES = {
     SOURCE_MOXFIELD: ("M", "#9b59b6"),  # purple, like the foil tint's
 }
@@ -35,9 +34,7 @@ class DecksScreen(QWidget):
     """Grid of clickable deck tiles, with active/format filters."""
 
     deck_selected = Signal(object)  # emitted with a models.deck.Deck on click
-    delete_requested = Signal(object)  # emitted with a Deck via a tile's right-click menu (local decks only)
     refresh_requested = Signal()    # emitted when "Refresh decks" is clicked
-    deck_imported = Signal(str)     # a decklist was imported as a local deck (its id)
 
     def __init__(self, app: MTGApp):
         """Builds the screen and its (initially both-on) filters, then
@@ -86,12 +83,6 @@ class DecksScreen(QWidget):
         self._commander_toggle = ToggleSwitch(checked=True)
         self._commander_toggle.toggled.connect(self._on_commander_toggled)
         top_layout.addWidget(self._commander_toggle)
-
-        self._import_btn = QPushButton("Import deck")
-        self._import_btn.setToolTip("Paste a decklist (Moxfield format) to add it as a Deck Maker deck")
-        self._import_btn.setEnabled(app.is_logged_in)  # local decks are saved per user
-        self._import_btn.clicked.connect(self._on_import_clicked)
-        top_layout.addWidget(self._import_btn)
 
         self._refresh_btn = QPushButton("Refresh decks")
         self._refresh_btn.setEnabled(app.is_logged_in)
@@ -195,29 +186,10 @@ class DecksScreen(QWidget):
                 radius=12,
             )
             tile.clicked.connect(self.deck_selected.emit)
-            if not deck.is_imported:  # only Deck Maker decks can be deleted
-                tile.setContextMenuPolicy(Qt.CustomContextMenu)
-                tile.customContextMenuRequested.connect(
-                    lambda pos, t=tile: self._show_tile_menu(t, pos)
-                )
             tile.load_image()
             self._flow.addWidget(tile)
 
         self._result_count.setText(plural(shown, "deck") if self._name_filter else "")
-
-    def _on_import_clicked(self):
-        """Import deck: the paste dialog; announces the new deck once saved."""
-        from ui.components.deck_import_dialog import DeckImportDialog
-        dialog = DeckImportDialog(self, self.app.username)
-        if dialog.exec() and dialog.deck_id:
-            self.deck_imported.emit(dialog.deck_id)
-
-    def _show_tile_menu(self, tile, pos):
-        """Right-click on a Deck Maker deck's tile: a "Delete deck" menu."""
-        menu = QMenu(self)
-        delete_action = menu.addAction("Delete deck")
-        delete_action.triggered.connect(lambda: self.delete_requested.emit(tile.payload))
-        menu.exec(tile.mapToGlobal(pos))
 
     def _commander_url(self, deck) -> str:
         """The deck's commander art URL for its tile, or "" if the deck

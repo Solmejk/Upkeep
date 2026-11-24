@@ -104,7 +104,7 @@ class _TrackerCard(QFrame):
 
     def _commander_art(self, best: gt.DeckStats) -> tuple:
         """(image url, cache name) for the deck's commander: from your deck
-        (Moxfield or Deck Maker) when it's one of yours, else Scryfall by
+        (Moxfield) when it's one of yours, else Scryfall by
         the commander's / deck's name."""
         deck = next((d for d in self._home.app.decks if best.deck.deck_id and d.deck_id == best.deck.deck_id), None)
         if deck is not None:

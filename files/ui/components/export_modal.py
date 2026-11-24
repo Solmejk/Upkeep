@@ -6,8 +6,6 @@
     ExportModal     — the Availability Checker's Export: checked cards as
                       '<qty> <name> (<SET>)' lines (the format Cardmarket's
                       wantlist search accepts), filterable by status.
-    DeckExportModal — a Deck Maker deck's Export: the deck as Moxfield import
-                      text (deck_export.py) — exact printings and foiling kept.
 """
 
 from PySide6.QtCore import Qt
@@ -17,7 +15,6 @@ from PySide6.QtWidgets import (
 )
 
 import availability
-import deck_export
 from card_fields import plural
 from ui.components.overlay_modal import OverlayModal
 
@@ -142,19 +139,3 @@ class ExportModal(TextExportModal):
             lines.append(f"{quantity} {r['name']} ({set_code.upper()})")
         self.set_text("\n".join(lines), plural(len(lines), "line"))
 
-
-class DeckExportModal(TextExportModal):
-    """A Deck Maker deck's export to Moxfield. Call show_export(deck)."""
-
-    def __init__(self, parent=None):
-        super().__init__(
-            parent, "Export to Moxfield",
-            hint="In Moxfield: create a new deck, choose Import (or Bulk Edit) and paste. "
-                 "Set, collector number and foiling pick the exact cards.",
-            width=520, height=600)
-
-    def show_export(self, deck):
-        """Shows `deck`'s (a loaded models.deck.Deck) import text."""
-        self._title.setText(f"Export \"{deck.name}\" to Moxfield")
-        self.set_text(deck_export.moxfield_text(deck), f"{deck.total_cards} cards")
-        self._show_overlay()

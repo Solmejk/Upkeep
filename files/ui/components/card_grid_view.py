@@ -138,7 +138,7 @@ class CardThumbnailDelegate(QStyledItemDelegate):
                 painter, QRectF(x, img_y, pixmap.width(), pixmap.height()), IMAGE_RADIUS, color, color2,
             )
 
-        # Status tint (e.g. the Deck Maker's "used in another deck"), same
+        # Status tint (tint_fn), same
         # wash as the Availability screen's tiles
         status_color = self.tint_fn(entry) if self.tint_fn else None
         if status_color is not None:

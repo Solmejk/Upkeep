@@ -396,17 +396,6 @@ QLabel#resultCountAbove {
     background-color: transparent;
 }
 
-QPushButton#deleteDeckButton {
-    background-color: transparent;
-    color: #e8e8e8;
-    border: 1px solid #2d2d2d;
-    padding: 6px 14px;
-}
-QPushButton#deleteDeckButton:hover {
-    color: #e06c6c;
-    border: 1px solid #e06c6c;
-}
-
 QLabel#chartTitle {
     color: #e8e8e8;
     font-size: 9pt;

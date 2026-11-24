@@ -7,6 +7,8 @@ import time
 
 import requests
 
+from rate_limit import RateLimiter
+
 BASE_IMAGE_URL = "https://cards.scryfall.io/normal/front"
 SEARCH_URL = "https://api.scryfall.com/cards/search"
 
@@ -17,43 +19,11 @@ HEADERS = {
 }
 
 
-class _RateLimiter:
-    """Throttles calls to at most `max_per_second`, shared across threads.
-
-    Scryfall requires staying under 10 requests/sec and explicitly warns
-    that violating it repeatedly gets the IP network-blocked — this is not
-    optional. Concurrent price lookups (availability.check_availability)
-    can fire many requests from a thread pool at once; this makes sure
-    the actual outbound requests still land at a safe rate regardless of
-    how many threads are waiting on them.
-    """
-
-    def __init__(self, max_per_second: float):
-        """max_per_second: the shared rate ceiling every wait() call
-        collectively enforces, regardless of how many threads call it."""
-        self._interval = 1.0 / max_per_second
-        self._lock = threading.Lock()
-        self._next_slot = 0.0
-
-    def wait(self):
-        """Blocks the calling thread just long enough that this call's
-        request, plus every other thread's concurrent calls, land no
-        faster than max_per_second combined. Call immediately before
-        each outbound request."""
-        with self._lock:
-            now = time.monotonic()
-            start = max(now, self._next_slot)
-            self._next_slot = start + self._interval
-            delay = start - now
-        if delay > 0:
-            time.sleep(delay)
-
-
 # 2 per second: Scryfall refused (429) a ~45-request price fetch at 3 per
 # second, so stay well under — its card search / collection endpoints are
 # stricter than the API in general. Every request also backs off after a
 # 429 (_send).
-_rate_limiter = _RateLimiter(max_per_second=2)
+_rate_limiter = RateLimiter(max_per_second=2)
 BATCH_SIZE = 15  # names per Scryfall query, combined with "or" — see cheapest_prices_eur
 
 

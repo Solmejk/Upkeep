@@ -1,5 +1,5 @@
-"""The " Sort" dropdown button shared by the Availability screen and the
-Deck Maker: a QToolButton with the sort icon that pops up an exclusive
+"""The " Sort" dropdown button shared by the Availability and
+Collection screens: a QToolButton with the sort icon that pops up an exclusive
 (radio-button-like) menu of sort modes, the current one checked.
 """
 

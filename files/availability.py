@@ -82,17 +82,16 @@ def used_in_decks(decks, card_name: str) -> list[dict]:
     return used
 
 
-def used_in_decks_by_printing(decks, card: dict, exclude_deck_id: str | None = None) -> list[dict]:
+def used_in_decks_by_printing(decks, card: dict) -> list[dict]:
     """Like used_in_decks, but only counting decks that use this exact
     printing + finish + language (set, collector number, foil/etched,
     language) — for a specific owned copy, e.g. a card clicked in the
-    collection. card: a flat dict with set/cn/isFoil/finish/language. exclude_deck_id: a deck to leave
-    out (the Deck Maker's own saved deck, which isn't "elsewhere")."""
+    collection. card: a flat dict with set/cn/isFoil/finish/language."""
     key = printing_key(card.get("set", ""), card.get("cn", ""), card.get("isFoil"), card.get("finish"),
                        card.get("language"))
     used = []
     for deck in decks:
-        if not deck.active or deck.deck_id == exclude_deck_id:
+        if not deck.active:
             continue
         quantity = sum(
             deck_languages.language_split(deck, c).get(key[3], 0)

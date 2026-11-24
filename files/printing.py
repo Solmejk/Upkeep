@@ -1,7 +1,7 @@
 """Printing keys: identify one exact owned version of a card — printing
 (set + collector number) + finish (nonfoil / foil / etched) + language —
 the same way for collection entries and deck cards. Used wherever copies
-are matched up: availability, the Deck Maker, deck languages, showcases,
+are matched up: availability, deck languages, showcases,
 the Collection and Purchases screens.
 """
 

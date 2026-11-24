@@ -8,13 +8,13 @@ import html
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea, QInputDialog,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea,
 )
 
 import availability
 import deck_stats
 from card_fields import plural
-from models import deck_languages, local_decks
+from models import deck_languages
 from models import token_printings
 from ui.components.section_card import back_button
 from ui.components.card_section import build_card_section, rebuild_card_sections, quantity_caption
@@ -33,13 +33,8 @@ class DeckDetailScreen(QWidget):
     in DecksScreen (see MainWindow._open_deck_detail)."""
 
     back_requested = Signal()  # emitted when the Back button is clicked
-    delete_requested = Signal(object)  # emitted with the Deck when "Delete deck" is clicked (local decks only)
-    export_requested = Signal(object)  # emitted with the Deck when "Export" is clicked (local decks only)
-    edit_requested = Signal(object)  # emitted with the Deck: "Edit deck" (local) / "Edit a copy" (imported)
     card_clicked = Signal(dict)  # emitted with a card dict when a tile is clicked
     tracker_deck_clicked = Signal(object)  # the Elo block was clicked — the deck's Game Tracker popout
-
-    languages_changed = Signal()  # card languages were confirmed for a Moxfield deck
 
     def __init__(self, app=None):
         """Builds the (initially empty) screen chrome — back button,
@@ -111,32 +106,11 @@ class DeckDetailScreen(QWidget):
         header_layout.addWidget(left_column)
         header_layout.addStretch()
 
-        # Right: delete button (Deck Maker decks only) + active label + toggle
+        # Right: active label + toggle
         toggle_row = QWidget()
         toggle_layout = QHBoxLayout(toggle_row)
         toggle_layout.setContentsMargins(0, 0, 0, 0)
         toggle_layout.setSpacing(8)
-
-        # Deck Maker decks without a commander (e.g. an imported list)
-        self._commander_btn = QPushButton("Set commander…")
-        self._commander_btn.setToolTip("Choose which of this deck's cards is its commander")
-        self._commander_btn.clicked.connect(self._choose_commander)
-        toggle_layout.addWidget(self._commander_btn)
-
-        self._edit_btn = QPushButton("Edit deck")
-        self._edit_btn.clicked.connect(lambda: self.edit_requested.emit(self.deck))
-        toggle_layout.addWidget(self._edit_btn)
-
-        self._export_btn = QPushButton("Export")
-        self._export_btn.setToolTip("Copy this deck as a Moxfield import list")
-        self._export_btn.clicked.connect(lambda: self.export_requested.emit(self.deck))
-        toggle_layout.addWidget(self._export_btn)
-
-        self._delete_btn = QPushButton("Delete deck")
-        self._delete_btn.setObjectName("deleteDeckButton")
-        self._delete_btn.clicked.connect(lambda: self.delete_requested.emit(self.deck))
-        toggle_layout.addWidget(self._delete_btn)
-        toggle_layout.addSpacing(16)
 
         self.active_label = QLabel("Active")
         self.active_label.setObjectName("activeLabel")
@@ -150,8 +124,7 @@ class DeckDetailScreen(QWidget):
 
         top_part.addWidget(header)
 
-        # Stats row: mana curve, color balance, mana production (shared with
-        # the Deck Maker's card preview)
+        # Stats row: mana curve, color balance, mana production
         self._stats_row = DeckStatsRow()
         self._stats_row.setContentsMargins(40, 0, 40, 24)
         self._elo_block = DeckEloBlock()  # Game Tracker Elo, first in the stats row
@@ -199,30 +172,8 @@ class DeckDetailScreen(QWidget):
                 f"<span style='color:#888888; font-size:14px; font-weight:normal'> Elo</span>")
         self._display_cards = self._cards_with_languages()
         self._refresh_language_warning()
-        # Deck Maker decks only: website imports can't be deleted, and are
-        # already on that website
-        self._export_btn.setVisible(not deck.is_imported)
-        self._commander_btn.setVisible(not deck.is_imported and not deck.commanders)
-        self._delete_btn.setVisible(not deck.is_imported)
-        # website imports aren't changed — editing makes a Deck Maker copy
-        self._edit_btn.setText("Edit a copy" if deck.is_imported else "Edit deck")
-        self._edit_btn.setToolTip(
-            "Make your own copy of this deck to edit in the Deck Maker" if deck.is_imported
-            else "Edit this deck in the Deck Maker"
-        )
         self._refresh_active_button()
         self.rebuild_sections()
-
-    def _choose_commander(self):
-        """Set commander…: pick one of the deck's possible commanders, save
-        it into the deck file and show the deck again with it."""
-        names = sorted(dict.fromkeys(local_decks.commander_candidates(self.deck.cards)))
-        name, ok = QInputDialog.getItem(self, "Set commander", "Commander:", names, 0, False)
-        if not ok or not name:
-            return
-        local_decks.set_commander(self.deck.deck_id, name)
-        self.deck.load()
-        self.show_deck(self.deck)
 
     def _search_context(self) -> dict:
         """card_search context: is:unique — the collection holds exactly
@@ -236,7 +187,7 @@ class DeckDetailScreen(QWidget):
         """The deck's cards as shown (tiles, card popup, search), each with
         the language of the copies it uses: the confirmed answer for
         Moxfield decks (see models.deck_languages), the stored language for
-        Deck Maker decks. A card using copies in several languages gets
+        (older) local decks. A card using copies in several languages gets
         "languages" {code: copies} instead (the popup shows the breakdown)."""
         cards = []
         for card in self.deck.cards:
@@ -287,7 +238,6 @@ class DeckDetailScreen(QWidget):
         self._refresh_language_warning()
         self._display_cards = self._cards_with_languages()
         self.rebuild_sections()  # tiles/popups/search use the new languages
-        self.languages_changed.emit()
 
 
     def _refresh_active_button(self):

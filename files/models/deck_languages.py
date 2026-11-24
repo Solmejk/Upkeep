@@ -27,7 +27,7 @@ def _printing_id(card: dict) -> str:
 def language_split(deck, card: dict) -> dict:
     """{language: copies} for a deck card: the user's confirmed answer for
     a Moxfield deck if there is a valid one, else all copies in the card's
-    recorded language (Deck Maker decks) or English (Moxfield)."""
+    recorded language or English (Moxfield)."""
     if deck.source == SOURCE_MOXFIELD:
         answer = _load().get(deck.deck_id, {}).get(_printing_id(card))
         if answer and sum(answer.values()) == card["quantity"]:
