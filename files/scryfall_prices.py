@@ -22,6 +22,7 @@ from datetime import date
 
 import cache_io
 import paths
+import progress
 import scryfall
 
 PRICE_KEYS = ("eur", "eur_foil", "usd", "usd_foil")
@@ -78,8 +79,13 @@ def refresh(entries: list, only_new: bool = False) -> str:
             got.add(card["id"])
         done_today.update(got)
 
+    batches = -(-len(todo) // scryfall.COLLECTION_BATCH)
     try:
-        scryfall.cards_collection([{"id": i} for i in todo], on_batch=keep)
+        with progress.stage("Prices", total=batches, step_seconds=0.5) as step:  # Scryfall: 2 requests/s
+            def keep_and_count(cards):
+                keep(cards)
+                step.advance()
+            scryfall.cards_collection([{"id": i} for i in todo], on_batch=keep_and_count)
     except Exception:
         if daily:  # still due: the next try today fetches only what's missing
             cache_io.write_json(paths.COLLECTION_PRICES_PATH, {

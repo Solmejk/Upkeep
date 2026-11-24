@@ -108,6 +108,7 @@ Track game results for your playgroup.
   - Fetches your profile, collection and decks from Moxfield, plus collection prices from Scryfall.
   - **Refresh prices** only asks Scryfall: your cards stay as last synced or imported. Prices also update on their own once a day (at startup, or at midnight if Upkeep is left open), so you rarely need it.
   - **View log** shows when each was last synced.
+  - While a sync runs, from any screen, the bottom of the sidebar shows what it's fetching (profile, deck list, collection pages, decks, prices), how far it has got and about how long is left.
 - **Moxfield access:** paste the private user-agent Moxfield issued for Upkeep. It's stored encrypted for your Windows account (it can't be read on another PC or account), never shown again, logged or uploaded, and can be replaced or removed. Without it Upkeep doesn't contact Moxfield at all.
 - **Import from Moxfield export:** the backup for when Moxfield's API can't be reached. Export your collection on moxfield.com (Collection → Export → CSV) and import the file; quantities, foil, language and condition come from the file, card data and prices from Scryfall.
 - **Cache:** clear the collection, decks, profile or images.
@@ -132,8 +133,9 @@ To move from running the source to the downloaded app (or back), copy the `data/
 ### Moxfield and Scryfall
 - **Moxfield:** your profile, collection and decks, plus other players' public deck lists for the Game Tracker. Data is fetched only when you log in or refresh, and cached in between. Moxfield's terms for Upkeep's access, all enforced in `moxfield.py`:
   - its private user-agent, kept secret (Settings → Moxfield access; never in the code or the build);
-  - **at most 1 request per second**, one at a time, across the whole app (Upkeep waits 1.2 s between requests);
-  - a "too many requests" (429) or refused (403) answer pauses *all* Moxfield requests for 10 minutes instead of retrying;
+  - **at most 1 request per second**, one at a time, across the whole app (Upkeep waits 1.5 s between requests, a deliberate safety margin);
+  - a "too many requests" (429) or refused (403) answer pauses *all* Moxfield requests for 10 minutes instead of retrying, even across a restart;
+  - only one Upkeep runs at a time, so two windows can't add up to more than the limit (starting it again brings the open window forward);
   - no deck building in Upkeep (that's the separate Upkeep Builder), and Upkeep stays free. If Moxfield can't be reached, import its CSV export instead (Settings → Import from Moxfield export).
 - **Scryfall:**
   - **Collection prices** are separate from the collection: fetched automatically once a day, on the first start of a new day (about 45 batch requests for 3,000+ printings). Scryfall updates its prices daily, and Moxfield's prices can lag a day or more behind. Refreshing or importing the collection only fetches prices for cards that are new.

@@ -34,6 +34,7 @@ def mox(tmp_path, monkeypatch):
     and requests.get recorded instead of sent. Returns the call list;
     set `mox.responses` to a list of FakeResponses to answer with."""
     monkeypatch.setattr(paths, "MOXFIELD_ACCESS_PATH", tmp_path / "moxfield_access.bin")
+    monkeypatch.setattr(paths, "MOXFIELD_PAUSE_PATH", tmp_path / "moxfield_pause.json")
     monkeypatch.setattr(moxfield, "_user_agent_cache", [])
     monkeypatch.setattr(moxfield, "_rate_limiter", rate_limit.RateLimiter(interval=0))
     moxfield._unblock()
@@ -92,6 +93,27 @@ def test_refusal_stops_all_requests(mox, status):
     with pytest.raises(moxfield.MoxfieldError, match="paused"):
         moxfield.fetch_deck("def")
     assert len(mox.calls) == 1  # the second request was never sent
+
+
+def test_pause_survives_a_restart(mox, monkeypatch):
+    moxfield.set_user_agent("Secret-Agent/1.0")
+    mox.responses = [FakeResponse(429)]
+    with pytest.raises(moxfield.MoxfieldError):
+        moxfield.fetch_deck("abc")
+    # a "restart": the module's in-memory state is gone, the saved pause isn't
+    monkeypatch.setattr(moxfield, "_blocked_until", 0.0)
+    monkeypatch.setattr(moxfield, "_block_reason", "")
+    monkeypatch.setattr(moxfield, "_block_loaded", False)
+    assert moxfield.blocked_for() > 60
+    with pytest.raises(moxfield.MoxfieldError, match="paused"):
+        moxfield.fetch_deck("def")
+    assert len(mox.calls) == 1
+
+
+def test_pause_is_capped_if_the_clock_was_wrong(mox, monkeypatch):
+    paths.MOXFIELD_PAUSE_PATH.write_text('{"until": 99999999999, "reason": "x"}', encoding="utf-8")
+    monkeypatch.setattr(moxfield, "_block_loaded", False)
+    assert moxfield.blocked_for() <= 24 * 60 * 60
 
 
 def test_retry_after_longer_than_the_block_is_respected(mox):

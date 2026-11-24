@@ -10,13 +10,15 @@ Moxfield's terms for Upkeep's access (from Moxfield, by email):
       (secret_store.py) — never in the code, the repo, the build or logs;
     - at most 1 API call per second, or the IP gets banned and the
       user-agent revoked: every request waits its turn on one shared
-      limiter (REQUEST_INTERVAL, a little over 1 s for margin), and
+      limiter (REQUEST_INTERVAL: 1.5 s, a wide margin), and
       requests are made one at a time;
     - no deck building in the app (removed — see Upkeep Builder);
     - the app stays 100% free.
 Without a user-agent no request is made at all. A 429 (too many
 requests) or a 403 (refused) stops *all* Moxfield requests for a while
-(BLOCK_SECONDS) instead of retrying.
+(BLOCK_SECONDS) instead of retrying — saved to disk, so a restart
+doesn't lift it. Only one Upkeep runs at a time (single_instance.py),
+so the limiter really covers every request from this PC's Upkeep.
 """
 
 import re
@@ -26,20 +28,24 @@ import time
 
 import requests
 
+import cache_io
 import paths
 import secret_store
 from rate_limit import RateLimiter
 
 API_BASE = "https://api2.moxfield.com"
 
-REQUEST_INTERVAL = 1.2  # seconds between requests: Moxfield allows 1 per second — keep a margin
+REQUEST_INTERVAL = 1.5  # seconds between requests: Moxfield allows 1 per second — a wide margin, on purpose
 BLOCK_SECONDS = 10 * 60  # after a 429 / 403: no Moxfield requests for this long (unless it says longer)
 _MAX_USER_AGENT_LENGTH = 512
 
 _rate_limiter = RateLimiter(interval=REQUEST_INTERVAL)
+_MAX_BLOCK_SECONDS = 24 * 60 * 60  # however long Moxfield asks for, or a wrong clock suggests
+
 _block_lock = threading.Lock()
-_blocked_until = 0.0  # time.monotonic() — see _block
+_blocked_until = 0.0  # time.time() — see _block
 _block_reason = ""
+_block_loaded = False  # the saved pause has been read (_load_block)
 _user_agent_cache: list = []  # [] = not read yet, [str | None] = read (see user_agent)
 
 
@@ -80,24 +86,51 @@ def clear_user_agent():
 
 
 # ------------------------------------------------------------- blocks
+# A pause is saved (paths.MOXFIELD_PAUSE_PATH, wall-clock time) so that
+# restarting Upkeep doesn't lift it — read once, on the first check.
+def _load_block():
+    global _blocked_until, _block_reason, _block_loaded
+    if _block_loaded:
+        return
+    _block_loaded = True
+    try:
+        data = cache_io.read_json(paths.MOXFIELD_PAUSE_PATH) or {}
+        _blocked_until = max(_blocked_until, float(data.get("until", 0)))
+        _block_reason = _block_reason or str(data.get("reason", ""))
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass  # unreadable: no saved pause
+
+
 def blocked_for() -> float:
     """Seconds until Moxfield requests are allowed again (0 if they are)."""
     with _block_lock:
-        return max(0.0, _blocked_until - time.monotonic())
+        _load_block()
+        # capped: a clock set back can't stretch a pause past its longest length
+        return min(max(0.0, _blocked_until - time.time()), _MAX_BLOCK_SECONDS)
 
 
 def _block(seconds: float, reason: str):
     global _blocked_until, _block_reason
+    seconds = min(seconds, _MAX_BLOCK_SECONDS)
     with _block_lock:
-        _blocked_until = max(_blocked_until, time.monotonic() + seconds)
+        _load_block()
+        _blocked_until = max(_blocked_until, time.time() + seconds)
         _block_reason = reason
+        try:
+            cache_io.write_json(paths.MOXFIELD_PAUSE_PATH, {"until": _blocked_until, "reason": reason})
+        except OSError:
+            pass  # still paused for this session
     print(f"Moxfield: {reason} — no Moxfield requests for {seconds / 60:.0f} min", file=sys.stderr)
 
 
 def _unblock():
-    global _blocked_until, _block_reason
+    global _blocked_until, _block_reason, _block_loaded
     with _block_lock:
-        _blocked_until, _block_reason = 0.0, ""
+        _blocked_until, _block_reason, _block_loaded = 0.0, "", True
+        try:
+            paths.MOXFIELD_PAUSE_PATH.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def _retry_after(response) -> float:

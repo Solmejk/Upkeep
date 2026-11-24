@@ -41,6 +41,9 @@ def main():
 
     window = MainWindow(mtg_app)
     window.showMaximized()
+    # a later start of Upkeep brings this window forward (single_instance.py)
+    import single_instance
+    window._show_requests = single_instance.ShowRequests(lambda: single_instance.bring_to_front(window), parent=window)
 
     def _shutdown():
         # Background image/deck-load tasks (ui/image_loader.py, ui/background.py)
@@ -59,6 +62,19 @@ if __name__ == "__main__":
     if "--self-test" in sys.argv:  # check a build without opening a window — see self_test.py
         import self_test
         sys.exit(self_test.run())
+    # Only one Upkeep at a time — Moxfield's 1 request/second covers them
+    # all (single_instance.py). Checked before the session log starts, so a
+    # second start doesn't rotate the running Upkeep's log.
+    import single_instance
+    if single_instance.acquire() is None:
+        if not single_instance.notify_running():
+            from PySide6.QtWidgets import QApplication, QMessageBox
+            _app = QApplication(sys.argv)
+            QMessageBox.information(
+                None, paths.APP_NAME,
+                f"{paths.APP_NAME} is already running, or still closing. If no window shows up, "
+                f"end {paths.APP_NAME} in Task Manager and start it again.")
+        sys.exit(0)
     # your folder (files/ from source, %APPDATA% for the .exe) — see paths.py
     paths.USER_ROOT.mkdir(parents=True, exist_ok=True)
     import session_log

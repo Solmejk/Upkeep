@@ -5,6 +5,7 @@ fetched fresh — see load() for the two modes.
 import cache_io
 import moxfield
 import paths
+import progress
 import scryfall_prices
 
 
@@ -58,11 +59,15 @@ class Collection:
         Moxfield rejects pageSize 0 and caps pages at 100 entries, so the
         full collection takes one request per page — one after another,
         at Moxfield's 1 request per second (see moxfield.py)."""
-        data = moxfield.fetch_collection_page(self._collection_id, 1)
-        if data == {}:
-            return None
+        with progress.stage("Collection pages", total=1, step_seconds=moxfield.REQUEST_INTERVAL) as step:
+            data = moxfield.fetch_collection_page(self._collection_id, 1)
+            if data == {}:
+                return None
+            pages = data.get("totalPages", 1)
+            step.update(1, total=pages)
 
-        for page in range(2, data.get("totalPages", 1) + 1):
-            data["data"].extend(moxfield.fetch_collection_page(self._collection_id, page)["data"])
+            for page in range(2, pages + 1):
+                data["data"].extend(moxfield.fetch_collection_page(self._collection_id, page)["data"])
+                step.update(page)
 
         return data

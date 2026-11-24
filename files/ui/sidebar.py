@@ -6,7 +6,7 @@ via add_item(), and an "Update to vX" button when a new version is out.
 from PySide6.QtCore import Qt, Signal, QRect
 from PySide6.QtGui import QPixmap, QPainter, QPainterPath
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QPushButton,
+    QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QPushButton, QLabel, QProgressBar,
 )
 
 from image_cache import get_image_path
@@ -64,6 +64,25 @@ class Sidebar(QWidget):
         self._list = self._build_nav_list()
         layout.addWidget(self._list, 1)
 
+        # Sync progress (progress.py) — shown only while a sync runs, from
+        # any screen: what's being fetched, how far, about how long is left
+        self._sync_box = QWidget()
+        self._sync_box.setObjectName("syncStatus")
+        sync_layout = QVBoxLayout(self._sync_box)
+        sync_layout.setContentsMargins(16, 8, 16, 8)
+        sync_layout.setSpacing(4)
+        self._sync_label = QLabel()
+        self._sync_label.setObjectName("syncStatusText")
+        self._sync_label.setWordWrap(True)
+        sync_layout.addWidget(self._sync_label)
+        self._sync_bar = QProgressBar()
+        self._sync_bar.setObjectName("syncStatusBar")
+        self._sync_bar.setTextVisible(False)
+        self._sync_bar.setFixedHeight(6)
+        sync_layout.addWidget(self._sync_bar)
+        self._sync_box.hide()
+        layout.addWidget(self._sync_box)
+
         # Shown only when a newer version is out (ui/update_flow.py)
         self._update_btn = QPushButton()
         self._update_btn.setObjectName("sidebarUpdateButton")
@@ -74,6 +93,21 @@ class Sidebar(QWidget):
         update_row.setContentsMargins(16, 8, 16, 16)
         update_row.addWidget(self._update_btn)
         layout.addLayout(update_row)
+
+    def set_progress(self, snapshot):
+        """snapshot: progress.snapshot() — (text, done, total), or None
+        to hide the panel. total 0: a moving "busy" bar."""
+        if snapshot is None:
+            self._sync_box.hide()
+            return
+        text, done, total = snapshot
+        self._sync_label.setText(text)
+        if total:
+            self._sync_bar.setRange(0, total)
+            self._sync_bar.setValue(done)
+        else:
+            self._sync_bar.setRange(0, 0)
+        self._sync_box.show()
 
     def show_update(self, version: str):
         """Shows the "Update to vX" button at the bottom."""

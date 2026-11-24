@@ -510,3 +510,19 @@ QProgressBar::chunk {
     background-color: #e8a838;
     border-radius: 3px;
 }
+
+/* Sidebar sync progress (ui/sidebar.py set_progress) */
+QLabel#syncStatusText {
+    color: #9a9a9a;
+    font-size: 11px;
+    background: transparent;
+}
+QProgressBar#syncStatusBar {
+    min-height: 6px;
+    max-height: 6px;
+    border: none;
+    border-radius: 3px;
+}
+QProgressBar#syncStatusBar::chunk {
+    border-radius: 3px;
+}

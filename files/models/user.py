@@ -6,8 +6,10 @@ Composes Collection and Deck — loading a User cascades into loading
 import cache_io
 import moxfield
 import paths
+import progress
 from models.collection import Collection
 from models.deck import Deck, SOURCE_MOXFIELD
+
 
 class User:
     def __init__(self, username):
@@ -106,7 +108,8 @@ class User:
 
     def refresh_profile(self):
         """Re-fetches the profile (avatar, collection ID)."""
-        self.load_profile(force=True)
+        with progress.stage("Profile", step_seconds=moxfield.REQUEST_INTERVAL):
+            self.load_profile(force=True)
         return f"collection ID {self._collection_id}"
 
     def refresh_collection(self):
@@ -129,25 +132,32 @@ class User:
         old_list = cache_io.read_json(list_path) or {"data": []}
         old_stamps = {d["publicId"]: d.get("lastUpdatedAtUtc") for d in old_list["data"]}
 
-        self.load_decks(force=True)
+        with progress.stage("Deck list", step_seconds=moxfield.REQUEST_INTERVAL):
+            self.load_decks(force=True)
         new_stamps = {
             d["publicId"]: d.get("lastUpdatedAtUtc")
             for d in cache_io.read_json(list_path)["data"]
         }
 
-        updated = failed = 0
         moxfield_decks = [d for d in self._decks if d.source == SOURCE_MOXFIELD]
+        to_fetch = []
         for deck in moxfield_decks:
             unchanged = old_stamps.get(deck.deck_id) == new_stamps.get(deck.deck_id)
             if unchanged:
                 deck.load()  # cache-only: tells us if it's missing or outdated
                 if deck.cards and not deck.outdated:
                     continue
-            try:
-                deck.load(force=True)
-                updated += 1
-            except Exception:
-                failed += 1
+            to_fetch.append(deck)
+
+        updated = failed = 0
+        with progress.stage("Decks", total=len(to_fetch), step_seconds=moxfield.REQUEST_INTERVAL) as step:
+            for deck in to_fetch:
+                try:
+                    deck.load(force=True)
+                    updated += 1
+                except Exception:
+                    failed += 1
+                step.advance()
 
         summary = f"{len(moxfield_decks)} decks, {updated} updated"
         if failed:

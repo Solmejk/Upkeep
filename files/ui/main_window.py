@@ -31,6 +31,7 @@ from ui.background import run_in_background
 from ui.update_flow import UpdateFlow
 import clear_cache
 import paths
+import progress
 import scryfall_prices
 import scryfall
 import session
@@ -139,6 +140,13 @@ class MainWindow(QMainWindow):
         self._price_timer.setInterval(30 * 60 * 1000)
         self._price_timer.timeout.connect(self._daily_prices)
         self._price_timer.start()
+
+        # Sync progress in the sidebar: the background syncs report into
+        # progress.py; this shows the latest (a cheap read, a few times a second)
+        self._progress_timer = QTimer(self)
+        self._progress_timer.setInterval(250)
+        self._progress_timer.timeout.connect(lambda: self.sidebar.set_progress(progress.snapshot()))
+        self._progress_timer.start()
 
         if paths.FROZEN:
             QTimer.singleShot(1500, self.update_flow.report_last_update)  # did last time's update arrive?

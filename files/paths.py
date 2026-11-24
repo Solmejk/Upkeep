@@ -53,6 +53,7 @@ DATA_DIR = USER_ROOT / "data"
 DECK_LANGUAGES_PATH = DATA_DIR / "deck_languages.json"  # confirmed card languages per Moxfield deck
 # Moxfield's private user-agent for Upkeep (secret: encrypted, see secret_store.py and moxfield.py)
 MOXFIELD_ACCESS_PATH = DATA_DIR / "moxfield_access.bin"
+MOXFIELD_PAUSE_PATH = DATA_DIR / "moxfield_pause.json"  # Moxfield requests paused until (after a 429 / 403)
 SHOWCASES_PATH = DATA_DIR / "showcases.json"  # Home screen showcases
 GAME_TRACKER_PATH = DATA_DIR / "game_tracker.json"  # players + games, see models.game_tracker
 TOKEN_PRINTINGS_PATH = DATA_DIR / "token_printings.json"  # chosen default printing per token
